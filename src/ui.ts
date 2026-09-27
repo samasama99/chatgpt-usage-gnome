@@ -222,14 +222,14 @@ export class UsageIndicator {
         content.add_child(this.footerLabel);
         contentItem.add_child(content);
 
-        this.button.menu.addMenuItem(contentItem);
-        this.button.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        (this.button.menu as any).addMenuItem(contentItem);
+        (this.button.menu as any).addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
         const refreshItem = new PopupMenu.PopupMenuItem('Refresh now');
         refreshItem.connect('activate', () => this.onRefresh());
-        this.button.menu.addMenuItem(refreshItem);
+        (this.button.menu as any).addMenuItem(refreshItem);
 
-        this.openStateSignalId = this.button.menu.connect('open-state-changed', (_menu, open: boolean) => {
+        this.openStateSignalId = (this.button.menu as any).connect('open-state-changed', (_menu, open: boolean) => {
             if (open) {
                 this.onOpen();
                 this.startPopupTick();
@@ -284,7 +284,7 @@ export class UsageIndicator {
     destroy(): void {
         this.stopPopupTick();
         if (this.openStateSignalId !== 0) {
-            this.button.menu.disconnect(this.openStateSignalId);
+            (this.button.menu as any).disconnect(this.openStateSignalId);
             this.openStateSignalId = 0;
         }
         this.button.destroy();
