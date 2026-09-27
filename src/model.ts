@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 export interface UsageWindow {
     readonly usedPercent: number;
     readonly remainingPercent: number;
@@ -17,15 +19,14 @@ interface ParsedWindow extends UsageWindow {
 }
 
 const WEEKLY_THRESHOLD_SECONDS = 2 * 24 * 60 * 60;
+const CONSUMPTION_EPSILON = 0.0001;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function finiteNumber(value: unknown): number | null {
-    if (typeof value !== 'number' || !Number.isFinite(value))
-        return null;
-    return value;
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
 function clampPercent(value: number): number {
@@ -65,7 +66,6 @@ function parseWindow(sourceKey: string, value: unknown): ParsedWindow | null {
 
     const used = firstFiniteNumber(value, ['used_percent', 'usedPercent']);
     const left = firstFiniteNumber(value, ['percent_left', 'remaining_percent', 'remainingPercent']);
-
     if (used === null && left === null)
         return null;
 
@@ -87,7 +87,8 @@ function classifyWindow(window: ParsedWindow): 'fiveHour' | 'weekly' | null {
 
     if (key.includes('weekly') || key.includes('week'))
         return 'weekly';
-    if (key.includes('five') || key.includes('5h') || key.includes('primary_window') && window.windowSeconds !== null && window.windowSeconds < WEEKLY_THRESHOLD_SECONDS)
+    if (key.includes('five') || key.includes('5h') ||
+        key.includes('primary_window') && window.windowSeconds !== null && window.windowSeconds < WEEKLY_THRESHOLD_SECONDS)
         return 'fiveHour';
 
     if (window.windowSeconds !== null)
@@ -97,19 +98,16 @@ function classifyWindow(window: ParsedWindow): 'fiveHour' | 'weekly' | null {
         return 'fiveHour';
     if (key.includes('secondary'))
         return 'weekly';
-
     return null;
 }
 
 function collectWindows(rateLimit: Record<string, unknown>): readonly ParsedWindow[] {
     const windows: ParsedWindow[] = [];
-
     for (const [key, value] of Object.entries(rateLimit)) {
         const parsed = parseWindow(key, value);
         if (parsed)
             windows.push(parsed);
     }
-
     return windows;
 }
 
@@ -137,26 +135,20 @@ export function parseUsageResponse(value: unknown, fetchedAtMs = Date.now()): Us
 
     const planValue = value.plan_type ?? value.plan;
     const plan = typeof planValue === 'string' && planValue.trim() ? planValue.trim() : null;
-
     return {fiveHour, weekly, plan, fetchedAtMs};
 }
 
-function equalWindow(a: UsageWindow | null, b: UsageWindow | null): boolean {
-    if (a === b)
-        return true;
-    if (a === null || b === null)
+function windowShowsConsumption(previous: UsageWindow | null, next: UsageWindow | null): boolean {
+    if (previous === null || next === null)
         return false;
-
-    return a.usedPercent === b.usedPercent &&
-        a.remainingPercent === b.remainingPercent &&
-        a.resetAtMs === b.resetAtMs &&
-        a.windowSeconds === b.windowSeconds;
+    return next.usedPercent > previous.usedPercent + CONSUMPTION_EPSILON;
 }
 
-export function fiveHourChanged(previous: UsageSnapshot | null, next: UsageSnapshot): boolean {
+export function detectedConsumption(previous: UsageSnapshot | null, next: UsageSnapshot): boolean {
     if (previous === null)
         return false;
-    return !equalWindow(previous.fiveHour, next.fiveHour);
+    return windowShowsConsumption(previous.fiveHour, next.fiveHour) ||
+        windowShowsConsumption(previous.weekly, next.weekly);
 }
 
 export function formatPanel(snapshot: UsageSnapshot | null): string {
@@ -170,17 +162,16 @@ export function formatPanel(snapshot: UsageSnapshot | null): string {
         return `W ${weekly}`;
     if (snapshot.weekly === null && snapshot.fiveHour !== null)
         return `5h ${five}`;
-
     return `5h ${five} · W ${weekly}`;
 }
 
 export function formatReset(resetAtMs: number | null, nowMs = Date.now()): string {
     if (resetAtMs === null)
-        return 'reset time unavailable';
+        return 'Reset time unavailable';
 
     const deltaMs = resetAtMs - nowMs;
     if (deltaMs <= 0)
-        return 'resetting now';
+        return 'Resetting now';
 
     const totalMinutes = Math.ceil(deltaMs / 60_000);
     const days = Math.floor(totalMinutes / (24 * 60));
@@ -188,26 +179,25 @@ export function formatReset(resetAtMs: number | null, nowMs = Date.now()): strin
     const minutes = totalMinutes % 60;
 
     if (days > 0)
-        return `resets in ${days}d ${hours}h`;
+        return `Resets in ${days}d ${hours}h`;
     if (hours > 0)
-        return `resets in ${hours}h ${minutes}m`;
-    return `resets in ${minutes}m`;
+        return `Resets in ${hours}h ${minutes}m`;
+    return `Resets in ${minutes}m`;
 }
 
 export function formatAge(timestampMs: number | null, nowMs = Date.now()): string {
     if (timestampMs === null)
-        return 'not updated yet';
+        return 'Not updated yet';
 
     const seconds = Math.max(0, Math.floor((nowMs - timestampMs) / 1000));
     if (seconds < 10)
-        return 'updated just now';
+        return 'Updated just now';
     if (seconds < 60)
-        return `updated ${seconds}s ago`;
+        return `Updated ${seconds}s ago`;
 
     const minutes = Math.floor(seconds / 60);
     if (minutes < 60)
-        return `updated ${minutes}m ago`;
+        return `Updated ${minutes}m ago`;
 
-    const hours = Math.floor(minutes / 60);
-    return `updated ${hours}h ago`;
+    return `Updated ${Math.floor(minutes / 60)}h ago`;
 }
