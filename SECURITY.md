@@ -1,13 +1,13 @@
 # Security
 
-Quota Monitor handles a ChatGPT/Codex OAuth access token, so its security model is intentionally small.
+ChatGPT Usage handles a ChatGPT/Codex OAuth access token, so its security model is intentionally small.
 
 ## Runtime behavior
 
 The extension:
 
 - reads the existing Codex auth file;
-- extracts only the access token and optional account ID needed for usage;
+- extracts only the access token and optional account ID needed for the usage request;
 - sends authenticated requests only to `https://chatgpt.com/backend-api/wham/usage`;
 - refuses HTTP redirects for authenticated requests;
 - disables libsoup's authentication cache;
@@ -41,4 +41,4 @@ For the most conservative workflow, inspect a reviewed commit or release before 
 
 ## Reporting
 
-Do not post active credentials or exploit details in a public issue. Use GitHub private vulnerability reporting when enabled, or contact the maintainer privately.
+Do not post active credentials or exploit details in a public issue. Contact the maintainer privately for sensitive reports.
