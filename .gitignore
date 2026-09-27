@@ -3,3 +3,15 @@ dist/
 *.zip
 *.tar.gz
 .DS_Store
+
+# Never commit local credentials or secrets.
+auth.json
+**/auth.json
+.codex/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
