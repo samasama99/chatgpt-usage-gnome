@@ -23,6 +23,7 @@
   "devDependencies": {
     "@girs/gjs": "5.0.0",
     "@girs/gnome-shell": "50.0.4",
-    "typescript": "5.8.3"
+    "typescript": "5.8.3",
+    "@girs/soup-3.0": "4.7.0"
   }
 }
