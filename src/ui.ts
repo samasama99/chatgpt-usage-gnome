@@ -229,7 +229,7 @@ export class UsageIndicator {
         refreshItem.connect('activate', () => this.onRefresh());
         (this.button.menu as any).addMenuItem(refreshItem);
 
-        this.openStateSignalId = (this.button.menu as any).connect('open-state-changed', (_menu, open: boolean) => {
+        this.openStateSignalId = (this.button.menu as any).connect('open-state-changed', (_menu: unknown, open: boolean) => {
             if (open) {
                 this.onOpen();
                 this.startPopupTick();
