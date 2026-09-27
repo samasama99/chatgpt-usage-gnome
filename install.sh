@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-UUID='quota-monitor@samasama99.github.io'
-LEGACY_UUID='chatgpt-usage@samasama99'
+UUID='chatgpt-usage@samasama99'
+LEGACY_UUID='quota-monitor@samasama99.github.io'
 REPO_SLUG='samasama99/chatgpt-usage-gnome'
 BRANCH='main'
 SUPPORTED_MIN=46
@@ -51,15 +51,16 @@ else
     curl --proto '=https' --tlsv1.2 -fsSL "$url" -o "$archive"
     tar -xzf "$archive" -C "$TMP"
     SOURCE="$TMP/chatgpt-usage-gnome-$BRANCH/extension"
-    [[ -f "$SOURCE/metadata.json" ]] || die 'downloaded repository does not contain a prebuilt extension.'
+    [[ -f "$SOURCE/metadata.json" ]] || die 'downloaded repository does not contain the prebuilt extension.'
 fi
 
 if [[ -d "$LEGACY_DEST" ]]; then
     gnome-extensions disable "$LEGACY_UUID" >/dev/null 2>&1 || true
     rm -rf -- "$LEGACY_DEST"
-    say 'Removed the old ChatGPT Usage extension UUID.'
+    say 'Removed the temporary Quota Monitor build.'
 fi
 
+gnome-extensions disable "$UUID" >/dev/null 2>&1 || true
 rm -rf -- "$DEST"
 mkdir -p -- "$DEST"
 cp -a -- "$SOURCE/." "$DEST/"
@@ -78,9 +79,9 @@ if [[ -z "$auth_file" ]]; then
 fi
 
 if gnome-extensions enable "$UUID" >/dev/null 2>&1; then
-    say "Installed and enabled Quota Monitor for GNOME Shell $major."
+    say "Installed and enabled ChatGPT Usage for GNOME Shell $major."
 else
-    say "Installed Quota Monitor for GNOME Shell $major."
-    say 'GNOME has not loaded this new extension yet. Log out and back in once, then run:'
+    say "Installed ChatGPT Usage for GNOME Shell $major."
+    say 'GNOME has not loaded this extension yet. Log out and back in once, then run:'
     say "  gnome-extensions enable $UUID"
 fi
