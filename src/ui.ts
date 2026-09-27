@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 import Clutter from 'gi://Clutter';
+import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import St from 'gi://St';
 
@@ -11,8 +12,7 @@ import type {FetchFailure} from './api.js';
 import {formatAge, formatPanel, formatReset, type UsageSnapshot, type UsageWindow} from './model.js';
 import type {PollerState} from './poller.js';
 
-const SERVICE_ICON_NAME = 'utilities-system-monitor-symbolic';
-const PROGRESS_WIDTH = 236;
+const PROGRESS_WIDTH = 252;
 
 const VERTICAL_PROPS = 'orientation' in St.BoxLayout.prototype
     ? {orientation: Clutter.Orientation.VERTICAL}
@@ -32,13 +32,13 @@ class ProgressBar {
     constructor() {
         this.actor = new St.BoxLayout({
             ...HORIZONTAL_PROPS,
-            style_class: 'quota-progress-track',
+            style_class: 'chatgpt-progress-track',
             width: PROGRESS_WIDTH,
-            height: 6,
+            height: 5,
         } as never);
         this.fill = new St.Widget({
-            style_class: 'quota-progress-fill',
-            height: 6,
+            style_class: 'chatgpt-progress-fill',
+            height: 5,
         });
         this.actor.add_child(this.fill);
         this.update(0);
@@ -49,11 +49,11 @@ class ProgressBar {
         this.fill.width = Math.round(PROGRESS_WIDTH * percent / 100);
 
         if (percent <= 10)
-            this.fill.set_style_class_name('quota-progress-fill quota-progress-critical');
+            this.fill.set_style_class_name('chatgpt-progress-fill chatgpt-progress-critical');
         else if (percent <= 25)
-            this.fill.set_style_class_name('quota-progress-fill quota-progress-warning');
+            this.fill.set_style_class_name('chatgpt-progress-fill chatgpt-progress-warning');
         else
-            this.fill.set_style_class_name('quota-progress-fill');
+            this.fill.set_style_class_name('chatgpt-progress-fill');
     }
 }
 
@@ -66,31 +66,38 @@ class UsageRow {
     constructor(name: string) {
         this.actor = new St.BoxLayout({
             ...VERTICAL_PROPS,
-            style_class: 'quota-usage-row',
+            style_class: 'chatgpt-usage-card',
             x_expand: true,
         } as never);
 
         const header = new St.BoxLayout({
             ...HORIZONTAL_PROPS,
-            style_class: 'quota-usage-row-header',
+            style_class: 'chatgpt-usage-header',
             x_expand: true,
         } as never);
+
         const title = new St.Label({
             text: name,
-            style_class: 'quota-usage-row-title',
+            style_class: 'chatgpt-usage-title',
             x_expand: true,
             x_align: Clutter.ActorAlign.START,
+            y_align: Clutter.ActorAlign.CENTER,
         });
         this.value = new St.Label({
             text: '--',
-            style_class: 'quota-usage-row-value',
+            style_class: 'chatgpt-usage-value',
             x_align: Clutter.ActorAlign.END,
+            y_align: Clutter.ActorAlign.CENTER,
         });
+
         header.add_child(title);
         header.add_child(this.value);
 
         this.progress = new ProgressBar();
-        this.reset = new St.Label({text: '', style_class: 'quota-usage-row-reset'});
+        this.reset = new St.Label({
+            text: '',
+            style_class: 'chatgpt-reset',
+        });
 
         this.actor.add_child(header);
         this.actor.add_child(this.progress.actor);
@@ -119,25 +126,26 @@ function errorText(error: FetchFailure | null): string {
     case 'auth':
         return error.message;
     case 'rate-limit':
-        return 'Rate limited; showing the last known values.';
+        return 'Rate limited · showing the last known values';
     case 'network':
-        return 'Offline; showing the last known values.';
+        return 'Offline · showing the last known values';
     case 'server':
-        return 'Usage service unavailable; showing the last known values.';
+        return 'Usage service unavailable · showing the last known values';
     case 'invalid-response':
-        return 'Usage response format changed; showing the last known values.';
+        return 'Usage response changed · showing the last known values';
     }
 }
 
 function displayPlan(plan: string | null): string {
     if (plan === null || plan.length === 0)
         return '';
-    return plan.charAt(0).toUpperCase() + plan.slice(1);
+    return `${plan.charAt(0).toUpperCase() + plan.slice(1)} plan`;
 }
 
 export class UsageIndicator {
     readonly button: PanelMenu.Button;
 
+    private readonly serviceIcon: Gio.Icon;
     private readonly panelLabel: St.Label;
     private readonly fiveHourRow: UsageRow;
     private readonly weeklyRow: UsageRow;
@@ -151,69 +159,92 @@ export class UsageIndicator {
     private popupTickId = 0;
     private openStateSignalId = 0;
 
-    constructor(onOpen: OpenListener, onRefresh: RefreshListener) {
+    constructor(iconPath: string, onOpen: OpenListener, onRefresh: RefreshListener) {
         this.onOpen = onOpen;
         this.onRefresh = onRefresh;
+        this.serviceIcon = new Gio.FileIcon({
+            file: Gio.File.new_for_path(iconPath),
+        });
 
-        this.button = new PanelMenu.Button(0.0, 'Quota Monitor');
+        this.button = new PanelMenu.Button(0.0, 'ChatGPT Usage');
 
         const panelBox = new St.BoxLayout({
             ...HORIZONTAL_PROPS,
-            style_class: 'quota-panel',
+            style_class: 'chatgpt-panel',
             y_align: Clutter.ActorAlign.CENTER,
         } as never);
         panelBox.add_child(new St.Icon({
-            icon_name: SERVICE_ICON_NAME,
-            style_class: 'system-status-icon quota-panel-icon',
+            gicon: this.serviceIcon,
+            style_class: 'system-status-icon chatgpt-panel-icon',
             icon_size: 16,
         }));
         this.panelLabel = new St.Label({
             text: '5h -- · W --',
+            style_class: 'chatgpt-panel-label',
             y_align: Clutter.ActorAlign.CENTER,
         });
         panelBox.add_child(this.panelLabel);
         this.button.add_child(panelBox);
 
         const contentItem = new PopupMenu.PopupBaseMenuItem({
-            reactive: true,
+            reactive: false,
             activate: false,
             hover: false,
             can_focus: false,
         });
-        contentItem.remove_style_class_name('popup-inactive-menu-item');
 
         const content = new St.BoxLayout({
             ...VERTICAL_PROPS,
-            style_class: 'quota-popup',
+            style_class: 'chatgpt-popup',
             x_expand: true,
         } as never);
 
         const header = new St.BoxLayout({
             ...HORIZONTAL_PROPS,
-            style_class: 'quota-header',
+            style_class: 'chatgpt-header',
             x_expand: true,
         } as never);
-        header.add_child(new St.Icon({
-            icon_name: SERVICE_ICON_NAME,
-            style_class: 'quota-header-icon',
-            icon_size: 20,
+
+        const iconShell = new St.Bin({
+            style_class: 'chatgpt-header-icon-shell',
             y_align: Clutter.ActorAlign.CENTER,
+        });
+        iconShell.set_child(new St.Icon({
+            gicon: this.serviceIcon,
+            style_class: 'chatgpt-header-icon',
+            icon_size: 22,
         }));
+        header.add_child(iconShell);
 
         const heading = new St.BoxLayout({
             ...VERTICAL_PROPS,
             x_expand: true,
+            y_align: Clutter.ActorAlign.CENTER,
         } as never);
-        heading.add_child(new St.Label({text: 'Quota Monitor', style_class: 'quota-title'}));
-        this.planLabel = new St.Label({text: '', style_class: 'quota-plan'});
+        heading.add_child(new St.Label({
+            text: 'ChatGPT Usage',
+            style_class: 'chatgpt-title',
+        }));
+        this.planLabel = new St.Label({
+            text: '',
+            style_class: 'chatgpt-plan',
+        });
         heading.add_child(this.planLabel);
         header.add_child(heading);
 
         this.fiveHourRow = new UsageRow('5-hour');
         this.weeklyRow = new UsageRow('Weekly');
-        this.errorLabel = new St.Label({text: '', style_class: 'quota-error'});
+
+        this.errorLabel = new St.Label({
+            text: '',
+            style_class: 'chatgpt-error',
+        });
         this.errorLabel.clutter_text.line_wrap = true;
-        this.footerLabel = new St.Label({text: 'Not updated yet', style_class: 'quota-footer'});
+
+        this.footerLabel = new St.Label({
+            text: 'Not updated yet',
+            style_class: 'chatgpt-footer',
+        });
 
         content.add_child(header);
         content.add_child(this.fiveHourRow.actor);
@@ -225,19 +256,22 @@ export class UsageIndicator {
         (this.button.menu as any).addMenuItem(contentItem);
         (this.button.menu as any).addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
-        const refreshItem = new PopupMenu.PopupMenuItem('Refresh now');
+        const refreshItem = new PopupMenu.PopupMenuItem('Refresh usage');
         refreshItem.connect('activate', () => this.onRefresh());
         (this.button.menu as any).addMenuItem(refreshItem);
 
-        this.openStateSignalId = (this.button.menu as any).connect('open-state-changed', (_menu: unknown, open: boolean) => {
-            if (open) {
-                this.onOpen();
-                this.startPopupTick();
-                this.render();
-            } else {
-                this.stopPopupTick();
-            }
-        });
+        this.openStateSignalId = (this.button.menu as any).connect(
+            'open-state-changed',
+            (_menu: unknown, open: boolean) => {
+                if (open) {
+                    this.onOpen();
+                    this.startPopupTick();
+                    this.render();
+                } else {
+                    this.stopPopupTick();
+                }
+            },
+        );
     }
 
     update(state: PollerState): void {
@@ -263,7 +297,7 @@ export class UsageIndicator {
         this.errorLabel.visible = message.length > 0;
 
         const age = formatAge(this.state.lastSuccessMs, nowMs);
-        this.footerLabel.text = this.state.updating ? `Updating… · ${age}` : age;
+        this.footerLabel.text = this.state.updating ? `Updating…  ·  ${age}` : age;
     }
 
     private startPopupTick(): void {
