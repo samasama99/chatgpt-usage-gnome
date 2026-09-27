@@ -1,30 +1,74 @@
-.chatgpt-usage-popup {
-    min-width: 260px;
-    spacing: 8px;
-    padding: 4px 2px;
+.quota-panel {
+    spacing: 5px;
 }
 
-.chatgpt-usage-title {
-    font-weight: bold;
+.quota-panel-icon {
+    margin-right: 1px;
+}
+
+.quota-popup {
+    min-width: 268px;
+    spacing: 10px;
+    padding: 5px 3px;
+}
+
+.quota-header {
+    spacing: 9px;
+    padding-bottom: 4px;
+}
+
+.quota-header-icon {
+    opacity: 0.9;
+}
+
+.quota-title {
+    font-weight: 700;
     font-size: 1.05em;
 }
 
-.chatgpt-usage-plan,
-.chatgpt-usage-row-reset,
-.chatgpt-usage-footer {
-    opacity: 0.72;
+.quota-plan,
+.quota-usage-row-reset,
+.quota-footer {
+    opacity: 0.68;
 }
 
-.chatgpt-usage-row {
-    spacing: 2px;
-    padding: 5px 0;
+.quota-usage-row {
+    spacing: 5px;
+    padding: 4px 0;
 }
 
-.chatgpt-usage-row-title,
-.chatgpt-usage-row-value {
+.quota-usage-row-header {
+    spacing: 8px;
+}
+
+.quota-usage-row-title,
+.quota-usage-row-value {
     font-weight: 600;
 }
 
-.chatgpt-usage-error {
-    color: #e01b24;
+.quota-progress-track {
+    background-color: rgba(127, 127, 127, 0.22);
+    border-radius: 99px;
+}
+
+.quota-progress-fill {
+    background-color: #3584e4;
+    border-radius: 99px;
+}
+
+.quota-progress-warning {
+    background-color: #ed5b00;
+}
+
+.quota-progress-critical {
+    background-color: #e62d42;
+}
+
+.quota-error {
+    color: #e62d42;
+    padding-top: 2px;
+}
+
+.quota-footer {
+    padding-top: 2px;
 }
