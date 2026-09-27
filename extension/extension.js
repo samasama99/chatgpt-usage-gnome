@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import {UsagePoller} from './poller.js';
 import {UsageIndicator} from './ui.js';
 
-export default class QuotaMonitorExtension extends Extension {
+export default class ChatGPTUsageExtension extends Extension {
     indicator = null;
     poller = null;
     sleepSignalId = 0;
@@ -13,13 +14,16 @@ export default class QuotaMonitorExtension extends Extension {
     enable() {
         this.poller = new UsagePoller(state => this.indicator?.update(state));
         this.indicator = new UsageIndicator(
+            GLib.build_filenamev([this.path, 'chatgpt-symbolic.svg']),
             () => this.poller?.refreshIfStale(),
             () => this.poller?.forceRefresh(),
         );
+
         Main.panel.addToStatusArea(this.uuid, this.indicator.button, 0, 'right');
         this.subscribeToResume();
         this.poller.start();
     }
+
     disable() {
         this.unsubscribeFromResume();
         this.poller?.stop();
@@ -27,6 +31,7 @@ export default class QuotaMonitorExtension extends Extension {
         this.indicator?.destroy();
         this.indicator = null;
     }
+
     subscribeToResume() {
         if (this.sleepSignalId !== 0)
             return;
@@ -45,9 +50,11 @@ export default class QuotaMonitorExtension extends Extension {
             },
         );
     }
+
     unsubscribeFromResume() {
         if (this.sleepSignalId === 0)
             return;
+
         Gio.DBus.system.signal_unsubscribe(this.sleepSignalId);
         this.sleepSignalId = 0;
     }
