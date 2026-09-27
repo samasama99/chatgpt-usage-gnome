@@ -18,8 +18,8 @@
     "pack:extension": "npm run build && (cd extension && zip -qr ../chatgpt-usage@samasama99.shell-extension.zip .)"
   },
   "devDependencies": {
-    "@girs/gjs": "^5.0.0",
-    "@girs/gnome-shell": "^50.0.4",
-    "typescript": "^5.8.3"
+    "@girs/gjs": "5.0.0",
+    "@girs/gnome-shell": "50.0.4",
+    "typescript": "5.8.3"
   }
 }
