@@ -1,74 +1,98 @@
-.quota-panel {
-    spacing: 5px;
+.chatgpt-panel {
+    spacing: 6px;
 }
 
-.quota-panel-icon {
+.chatgpt-panel-icon {
     margin-right: 1px;
 }
 
-.quota-popup {
-    min-width: 268px;
-    spacing: 10px;
-    padding: 5px 3px;
-}
-
-.quota-header {
-    spacing: 9px;
-    padding-bottom: 4px;
-}
-
-.quota-header-icon {
-    opacity: 0.9;
-}
-
-.quota-title {
-    font-weight: 700;
-    font-size: 1.05em;
-}
-
-.quota-plan,
-.quota-usage-row-reset,
-.quota-footer {
-    opacity: 0.68;
-}
-
-.quota-usage-row {
-    spacing: 5px;
-    padding: 4px 0;
-}
-
-.quota-usage-row-header {
-    spacing: 8px;
-}
-
-.quota-usage-row-title,
-.quota-usage-row-value {
+.chatgpt-panel-label {
     font-weight: 600;
 }
 
-.quota-progress-track {
-    background-color: rgba(127, 127, 127, 0.22);
+.chatgpt-popup {
+    min-width: 286px;
+    spacing: 11px;
+    padding: 7px 5px 5px 5px;
+}
+
+.chatgpt-header {
+    spacing: 10px;
+    padding: 1px 1px 5px 1px;
+}
+
+.chatgpt-header-icon-shell {
+    width: 36px;
+    height: 36px;
+    padding: 7px;
+    border-radius: 18px;
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.chatgpt-header-icon {
+    color: #f7f7f8;
+}
+
+.chatgpt-title {
+    font-weight: 700;
+    font-size: 1.16em;
+}
+
+.chatgpt-plan {
+    opacity: 0.62;
+    font-size: 0.92em;
+}
+
+.chatgpt-usage-card {
+    spacing: 7px;
+    padding: 9px 10px;
+    border-radius: 12px;
+    background-color: rgba(255, 255, 255, 0.045);
+}
+
+.chatgpt-usage-header {
+    spacing: 10px;
+}
+
+.chatgpt-usage-title {
+    font-weight: 600;
+    opacity: 0.84;
+}
+
+.chatgpt-usage-value {
+    font-weight: 700;
+    font-size: 1.15em;
+}
+
+.chatgpt-progress-track {
+    background-color: rgba(255, 255, 255, 0.10);
     border-radius: 99px;
 }
 
-.quota-progress-fill {
-    background-color: #3584e4;
+.chatgpt-progress-fill {
+    background-color: #10a37f;
     border-radius: 99px;
 }
 
-.quota-progress-warning {
-    background-color: #ed5b00;
+.chatgpt-progress-warning {
+    background-color: #f0a044;
 }
 
-.quota-progress-critical {
-    background-color: #e62d42;
+.chatgpt-progress-critical {
+    background-color: #ef4146;
 }
 
-.quota-error {
-    color: #e62d42;
-    padding-top: 2px;
+.chatgpt-reset,
+.chatgpt-footer {
+    opacity: 0.62;
+    font-size: 0.92em;
 }
 
-.quota-footer {
-    padding-top: 2px;
+.chatgpt-error {
+    color: #ef6a6f;
+    padding: 1px 2px;
+}
+
+.chatgpt-footer {
+    padding: 1px 2px 2px 2px;
 }
