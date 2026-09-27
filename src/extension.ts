@@ -1,12 +1,12 @@
-import Gio from 'gi://Gio';
+// SPDX-License-Identifier: GPL-2.0-or-later
 
+import Gio from 'gi://Gio';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
-
 import {UsagePoller} from './poller.js';
 import {UsageIndicator} from './ui.js';
 
-export default class ChatGPTUsageExtension extends Extension {
+export default class QuotaMonitorExtension extends Extension {
     private indicator: UsageIndicator | null = null;
     private poller: UsagePoller | null = null;
     private sleepSignalId = 0;
@@ -17,7 +17,6 @@ export default class ChatGPTUsageExtension extends Extension {
             () => this.poller?.refreshIfStale(),
             () => this.poller?.forceRefresh(),
         );
-
         Main.panel.addToStatusArea(this.uuid, this.indicator.button, 0, 'right');
         this.subscribeToResume();
         this.poller.start();
@@ -43,8 +42,7 @@ export default class ChatGPTUsageExtension extends Extension {
             null,
             Gio.DBusSignalFlags.NONE,
             (_connection, _sender, _path, _interface, _signal, parameters) => {
-                const unpacked = parameters.deepUnpack() as [boolean];
-                const preparingForSleep = unpacked[0];
+                const [preparingForSleep] = parameters.deepUnpack() as [boolean];
                 if (!preparingForSleep)
                     this.poller?.refreshAfterResume();
             },
