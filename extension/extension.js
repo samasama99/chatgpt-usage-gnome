@@ -1,15 +1,21 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 import Gio from 'gi://Gio';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
-import { UsagePoller } from './poller.js';
-import { UsageIndicator } from './ui.js';
-export default class ChatGPTUsageExtension extends Extension {
+import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
+import {UsagePoller} from './poller.js';
+import {UsageIndicator} from './ui.js';
+
+export default class QuotaMonitorExtension extends Extension {
     indicator = null;
     poller = null;
     sleepSignalId = 0;
+
     enable() {
         this.poller = new UsagePoller(state => this.indicator?.update(state));
-        this.indicator = new UsageIndicator(() => this.poller?.refreshIfStale(), () => this.poller?.forceRefresh());
+        this.indicator = new UsageIndicator(
+            () => this.poller?.refreshIfStale(),
+            () => this.poller?.forceRefresh(),
+        );
         Main.panel.addToStatusArea(this.uuid, this.indicator.button, 0, 'right');
         this.subscribeToResume();
         this.poller.start();
@@ -24,12 +30,20 @@ export default class ChatGPTUsageExtension extends Extension {
     subscribeToResume() {
         if (this.sleepSignalId !== 0)
             return;
-        this.sleepSignalId = Gio.DBus.system.signal_subscribe('org.freedesktop.login1', 'org.freedesktop.login1.Manager', 'PrepareForSleep', '/org/freedesktop/login1', null, Gio.DBusSignalFlags.NONE, (_connection, _sender, _path, _interface, _signal, parameters) => {
-            const unpacked = parameters.deepUnpack();
-            const preparingForSleep = unpacked[0];
-            if (!preparingForSleep)
-                this.poller?.refreshAfterResume();
-        });
+
+        this.sleepSignalId = Gio.DBus.system.signal_subscribe(
+            'org.freedesktop.login1',
+            'org.freedesktop.login1.Manager',
+            'PrepareForSleep',
+            '/org/freedesktop/login1',
+            null,
+            Gio.DBusSignalFlags.NONE,
+            (_connection, _sender, _path, _interface, _signal, parameters) => {
+                const [preparingForSleep] = parameters.deepUnpack();
+                if (!preparingForSleep)
+                    this.poller?.refreshAfterResume();
+            },
+        );
     }
     unsubscribeFromResume() {
         if (this.sleepSignalId === 0)
