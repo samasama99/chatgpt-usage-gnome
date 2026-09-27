@@ -1,9 +1,9 @@
 {
-  "name": "quota-monitor-gnome",
-  "version": "0.2.0",
+  "name": "chatgpt-usage-gnome",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
-  "description": "GNOME Shell extension for ChatGPT/Codex usage limits",
+  "description": "Polished GNOME Shell usage monitor for ChatGPT/Codex",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/samasama99/chatgpt-usage-gnome.git"
@@ -15,15 +15,13 @@
     "typecheck": "tsc --noEmit",
     "build": "tsc && node scripts-copy-build.mjs",
     "test": "node --test tests/*.test.mjs",
-    "store-check": "node scripts/store-check.mjs",
-    "check": "npm run security-check && npm run typecheck && npm run build && npm test && npm run store-check",
-    "pack:store": "npm run build && (cd extension && zip -qr ../quota-monitor@samasama99.github.io.shell-extension.zip .)",
-    "pack:extension": "npm run pack:store"
+    "check": "npm run security-check && npm run typecheck && npm run build && npm test",
+    "pack:extension": "npm run build && (cd extension && zip -qr ../chatgpt-usage@samasama99.shell-extension.zip .)"
   },
   "devDependencies": {
     "@girs/gjs": "5.0.0",
     "@girs/gnome-shell": "50.0.4",
-    "typescript": "5.8.3",
-    "@girs/soup-3.0": "4.7.0"
+    "@girs/soup-3.0": "4.7.0",
+    "typescript": "5.8.3"
   }
 }
