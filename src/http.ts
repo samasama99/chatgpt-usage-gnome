@@ -41,7 +41,7 @@ export class HttpClient {
                 this.cancellable,
                 (session, result) => {
                     try {
-                        const bytes = session.send_and_read_finish(result);
+                        const bytes = this.session.send_and_read_finish(result);
                         const data = bytes.get_data() ?? new Uint8Array();
                         resolve({
                             status: message.status_code,
