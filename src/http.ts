@@ -26,6 +26,11 @@ export class HttpClient {
         if (message === null)
             return Promise.reject(new Error('Invalid usage endpoint URL.'));
 
+        // Never allow the bearer token to be replayed to a redirect target.
+        // The usage endpoint is expected to answer directly.
+        message.add_flags(Soup.MessageFlags.NO_REDIRECT);
+        message.add_flags(Soup.MessageFlags.DO_NOT_USE_AUTH_CACHE);
+
         for (const [name, value] of Object.entries(headers))
             message.request_headers.replace(name, value);
 
