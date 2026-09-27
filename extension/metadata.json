@@ -1,0 +1,8 @@
+{
+  "name": "ChatGPT Usage",
+  "description": "Minimal GNOME panel indicator for ChatGPT/Codex 5-hour and weekly usage limits.",
+  "uuid": "chatgpt-usage@samasama99",
+  "url": "https://github.com/samasama99/chatgpt-usage-gnome",
+  "version": 1,
+  "shell-version": ["46", "47", "48", "49", "50"]
+}
