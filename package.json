@@ -1,0 +1,25 @@
+{
+  "name": "chatgpt-usage-gnome",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Minimal GNOME Shell extension for ChatGPT/Codex usage limits",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/samasama99/chatgpt-usage-gnome.git"
+  },
+  "license": "MIT",
+  "sideEffects": false,
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc && node scripts-copy-build.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "check": "npm run typecheck && npm run build && npm test",
+    "pack:extension": "npm run build && (cd extension && zip -qr ../chatgpt-usage@samasama99.shell-extension.zip .)"
+  },
+  "devDependencies": {
+    "@girs/gjs": "^5.0.0",
+    "@girs/gnome-shell": "^50.0.4",
+    "typescript": "^5.8.3"
+  }
+}
