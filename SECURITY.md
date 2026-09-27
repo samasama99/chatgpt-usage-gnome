@@ -1,58 +1,44 @@
 # Security
 
-This extension handles a ChatGPT/Codex OAuth access token, so its security model is intentionally small and explicit.
+Quota Monitor handles a ChatGPT/Codex OAuth access token, so its security model is intentionally small.
 
 ## Runtime behavior
 
 The extension:
 
-- reads the existing Codex authentication file from `$CODEX_HOME/auth.json`, `~/.codex/auth.json`, or `~/.config/codex/auth.json`;
-- extracts only the access token and optional ChatGPT account ID required for the usage request;
+- reads the existing Codex auth file;
+- extracts only the access token and optional account ID needed for usage;
 - sends authenticated requests only to `https://chatgpt.com/backend-api/wham/usage`;
 - refuses HTTP redirects for authenticated requests;
-- does not write, refresh, copy, persist, or log OAuth credentials;
-- does not run a daemon, helper server, Node.js runtime, Python process, or Rust process at runtime;
-- does not intentionally contact analytics, telemetry, advertising, or other third-party services.
+- disables libsoup's authentication cache;
+- never writes, refreshes, copies, persists, or logs OAuth credentials;
+- runs no daemon, helper server, Node.js runtime, Python process, or Rust process;
+- sends no intentional analytics or telemetry.
 
 ## Trust boundary
 
-The extension trusts:
+The extension trusts the local GNOME user session, the local Codex credential file, the operating-system TLS stack, and `chatgpt.com`.
 
-- the local GNOME Shell user session;
-- the local Codex credential file;
-- the operating system TLS trust store and networking stack;
-- `chatgpt.com` for the usage endpoint.
+A malicious process already running as the same desktop user can generally read the same credential file, so this extension is not intended to defend against a compromised user session.
 
-A process that can already read files or memory as the same desktop user can usually access the same Codex credentials independently of this extension. The extension is not intended to defend against a compromised user session.
-
-The usage endpoint is an internal ChatGPT/Codex endpoint rather than a documented public API. Response data is treated as untrusted JSON and validated before it reaches the UI.
+The usage endpoint is internal rather than a documented public API. Response data is validated before reaching the UI.
 
 ## Credential hygiene
 
-Do not commit:
+Do not commit `auth.json`, `.env` files, private keys, exported cookies, or copied OAuth/API tokens.
 
-- `auth.json`;
-- `.env` files;
-- private keys or certificates containing private keys;
-- exported cookies or browser session data;
-- copied OAuth or API tokens.
-
-The repository includes ignore rules to reduce the chance of accidentally committing these files.
-
-Users should keep the Codex auth file private to their local account. A typical Linux permission is:
+Typical local permission:
 
 ```bash
 chmod 600 ~/.codex/auth.json
 ```
 
-## Supply-chain notes
+## Supply chain
 
-End users install the prebuilt JavaScript stored under `extension/`; they do not need npm at runtime.
+End users install the prebuilt JavaScript under `extension/`; npm is not required at runtime. Development dependencies are pinned to exact top-level versions. CI runs with read-only repository permissions and installs development dependencies with lifecycle scripts disabled.
 
-For the most conservative workflow, inspect a reviewed commit or release before installing it rather than piping a mutable branch directly into a shell.
+For the most conservative workflow, inspect a reviewed commit or release before installing instead of piping a mutable branch into a shell.
 
-## Reporting a vulnerability
+## Reporting
 
-Do not put active credentials, tokens, exploit payloads, or other sensitive data in a public issue.
-
-If private vulnerability reporting is enabled for this repository, use the repository Security tab. Otherwise contact the maintainer privately through their GitHub profile.
+Do not post active credentials or exploit details in a public issue. Use GitHub private vulnerability reporting when enabled, or contact the maintainer privately.
