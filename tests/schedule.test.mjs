@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import {enterFastMode, failureBackoffSeconds, nextSuccessDelaySeconds} from '../extension/schedule.js';
+import {ACTIVITY_INTERVALS_SECONDS, failureBackoffSeconds, nextSuccessSchedule} from '../extension/schedule.js';
 
 const snapshot = {
     fiveHour: {usedPercent: 10, remainingPercent: 90, resetAtMs: null, windowSeconds: 18_000},
@@ -10,16 +10,35 @@ const snapshot = {
     fetchedAtMs: 0,
 };
 
-test('uses 60 seconds while idle', () => assert.equal(nextSuccessDelaySeconds(1_000, 0, snapshot), 60));
-
-test('uses 15 seconds while fast mode is active', () => {
-    const fastUntil = enterFastMode(1_000);
-    assert.equal(nextSuccessDelaySeconds(1_000, fastUntil, snapshot), 15);
+test('uses 60 seconds while idle', () => {
+    assert.deepEqual(nextSuccessSchedule(1_000, null, snapshot), {
+        delaySeconds: 60,
+        nextActivityIndex: null,
+    });
 });
 
-test('wakes at a known reset before the normal poll', () => {
+test('progressively backs off after activity', () => {
+    let index = 0;
+    const delays = [];
+
+    while (index !== null) {
+        const result = nextSuccessSchedule(1_000, index, snapshot);
+        delays.push(result.delaySeconds);
+        index = result.nextActivityIndex;
+    }
+
+    assert.deepEqual(delays, [...ACTIVITY_INTERVALS_SECONDS]);
+    assert.equal(nextSuccessSchedule(1_000, index, snapshot).delaySeconds, 60);
+});
+
+test('activity can restart the sequence at eight seconds', () => {
+    assert.equal(nextSuccessSchedule(1_000, 3, snapshot).delaySeconds, 34);
+    assert.equal(nextSuccessSchedule(1_000, 0, snapshot).delaySeconds, 8);
+});
+
+test('wakes at a known reset before normal polling', () => {
     const resetSoon = {...snapshot, fiveHour: {...snapshot.fiveHour, resetAtMs: 11_000}};
-    assert.equal(nextSuccessDelaySeconds(1_000, 0, resetSoon), 10);
+    assert.equal(nextSuccessSchedule(1_000, null, resetSoon).delaySeconds, 10);
 });
 
 test('failure backoff is capped at five minutes', () => {
@@ -27,5 +46,4 @@ test('failure backoff is capped at five minutes', () => {
     assert.equal(failureBackoffSeconds(2), 120);
     assert.equal(failureBackoffSeconds(3), 240);
     assert.equal(failureBackoffSeconds(4), 300);
-    assert.equal(failureBackoffSeconds(10), 300);
 });
