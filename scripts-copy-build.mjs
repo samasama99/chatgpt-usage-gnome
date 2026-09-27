@@ -5,4 +5,5 @@ await mkdir('extension', {recursive: true});
 await cp('dist', 'extension', {recursive: true});
 await cp('metadata.json', 'extension/metadata.json');
 await cp('stylesheet.css', 'extension/stylesheet.css');
+await cp('chatgpt-symbolic.svg', 'extension/chatgpt-symbolic.svg');
 await cp('LICENSE', 'extension/LICENSE');
