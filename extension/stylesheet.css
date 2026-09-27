@@ -1,0 +1,30 @@
+.chatgpt-usage-popup {
+    min-width: 260px;
+    spacing: 8px;
+    padding: 4px 2px;
+}
+
+.chatgpt-usage-title {
+    font-weight: bold;
+    font-size: 1.05em;
+}
+
+.chatgpt-usage-plan,
+.chatgpt-usage-row-reset,
+.chatgpt-usage-footer {
+    opacity: 0.72;
+}
+
+.chatgpt-usage-row {
+    spacing: 2px;
+    padding: 5px 0;
+}
+
+.chatgpt-usage-row-title,
+.chatgpt-usage-row-value {
+    font-weight: 600;
+}
+
+.chatgpt-usage-error {
+    color: #e01b24;
+}
