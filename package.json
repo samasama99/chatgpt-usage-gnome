@@ -22,6 +22,6 @@
     "@girs/gjs": "5.0.0",
     "@girs/gnome-shell": "50.0.4",
     "@girs/soup-3.0": "4.7.0",
-    "typescript": "5.8.3"
+    "typescript": "7.0.2"
   }
 }
