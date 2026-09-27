@@ -15,6 +15,8 @@ export class HttpClient {
         const message = Soup.Message.new(method, url);
         if (message === null)
             return Promise.reject(new Error('Invalid usage endpoint URL.'));
+        message.add_flags(Soup.MessageFlags.NO_REDIRECT);
+        message.add_flags(Soup.MessageFlags.DO_NOT_USE_AUTH_CACHE);
         for (const [name, value] of Object.entries(headers))
             message.request_headers.replace(name, value);
         return new Promise((resolve, reject) => {
