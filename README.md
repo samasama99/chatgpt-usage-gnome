@@ -1,153 +1,103 @@
-# ChatGPT Usage — GNOME Shell
+# Quota Monitor — GNOME Shell
 
-A small, auditable GNOME Shell extension that shows your ChatGPT/Codex usage limits in the top bar.
+A small, auditable GNOME Shell extension that shows ChatGPT/Codex subscription usage in the top bar.
 
 ```text
-5h 82% · W 97%
+[icon]  5h 82% · W 97%
 ```
 
-Click it to see the 5-hour and weekly windows, their reset countdowns, update age, errors, and a manual refresh action.
+Click it for the 5-hour and weekly windows, thin progress bars, reset countdowns, update age, errors, and manual refresh.
 
 ## Design goals
 
-- **No extra login.** Reads the existing Codex CLI/Desktop OAuth file.
-- **No server or daemon.** GNOME Shell talks directly to `chatgpt.com`.
-- **No runtime dependencies.** No Node, npm, Python, Rust, curl, or helper process after installation.
-- **No token storage.** Credentials are read for each request and never copied, written, logged, or persisted by the extension.
-- **Small runtime state.** One panel button, one popup, one HTTP session, one one-shot poll timer, and one normalized usage snapshot.
-- **TypeScript source.** Strict internal types plus runtime validation of untrusted JSON.
-- **Modern GNOME only.** GNOME Shell 46–50. GNOME 42 is intentionally unsupported.
+- No extra login: reads the existing Codex OAuth file.
+- No server or daemon: GNOME Shell talks directly to `chatgpt.com`.
+- No runtime dependencies: no Node, npm, Python, Rust, curl, or helper process after installation.
+- No token storage: credentials are read per request and never copied, written, logged, or persisted by the extension.
+- Modern GNOME only: Shell 46–50.
+- Store-oriented package: `extension/` contains only runtime files.
 
 ## Authentication
 
 The extension looks for Codex auth in this order:
 
-1. `$CODEX_HOME/auth.json` when `CODEX_HOME` is visible to the GNOME session
+1. `$CODEX_HOME/auth.json`
 2. `~/.codex/auth.json`
 3. `~/.config/codex/auth.json`
 
-Run this once if needed:
+Run `codex login` if needed. The extension never refreshes or rewrites OAuth tokens. Authenticated requests refuse redirects.
 
-```bash
-codex login
+## Polling
+
+Idle polling is **60 seconds**. When new consumption is detected in either quota window, polling progressively backs off:
+
+```text
+8s → 13s → 21s → 34s → 55s → 60s idle
 ```
 
-The extension never refreshes or rewrites OAuth tokens. Codex owns the login lifecycle.
+Any new consumption restarts the sequence at 8 seconds. Quota resets do not count as activity: the scheduler watches for an increase in raw `used_percent`, not just any value change.
 
-## Polling behavior
+Other behavior:
 
-The short 5-hour window drives refresh frequency:
-
-- startup: immediate request
-- normal/idle: every **60 seconds**
-- when 5-hour usage changes: every **15 seconds**
-- fast mode lasts until **90 seconds after the most recent 5-hour change**
-- weekly-only changes update the UI but do **not** trigger fast mode
-- opening the popup refreshes if the last success is older than **15 seconds**
+- startup: immediate refresh
+- popup open: refresh if last success is older than 15s
 - resume from suspend: immediate refresh
-- known reset time reached: refresh at the reset rather than waiting for the normal timer
-- failures: 60s → 120s → 240s → 300s backoff
-- HTTP 429 honors `Retry-After` when present
+- known reset time: wake at the reset
+- failures: 60s → 120s → 240s → 300s
+- HTTP 429: honor `Retry-After`
 
-The 5-hour and weekly limits come from the same request, so there is no second weekly network timer. Weekly is updated whenever usage is fetched, at zero additional request cost.
+Both quota windows come from the same request, so weekly usage does not need a separate timer.
 
-The reset countdown is recomputed locally once per minute **only while the popup is open**.
+## Visual design
 
-## One-line install
+The panel stays compact: a small GNOME symbolic monitor icon plus `5h 82% · W 97%`.
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/samasama99/chatgpt-usage-gnome/main/install.sh | bash
-```
+The popup uses stronger percentage hierarchy and thin progress bars. Normal quota is blue, low quota gets a restrained warning state, and critical quota gets a danger state.
 
-The installer:
+A generic GNOME symbolic icon is used instead of bundling third-party branded artwork, which keeps a future extensions.gnome.org submission simple and trademark-safe.
 
-- requires no root
-- accepts GNOME Shell 46–50 only
-- downloads the prebuilt runtime files
-- installs to `~/.local/share/gnome-shell/extensions/chatgpt-usage@samasama99/`
-- tries to enable the extension
-- does not install or modify Codex
-
-On a first install under a Wayland GNOME session, GNOME may not discover a brand-new extension until you log out and back in once. The installer prints the enable command if that is required.
-
-### Install from a local clone
+## Install
 
 ```bash
-git clone https://github.com/samasama99/chatgpt-usage-gnome.git
-cd chatgpt-usage-gnome
-./install.sh
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/samasama99/chatgpt-usage-gnome/main/install.sh | bash
 ```
 
-No build tools are needed because the repository contains the prebuilt `extension/` directory.
+The extension installs to:
+
+```text
+~/.local/share/gnome-shell/extensions/quota-monitor@samasama99.github.io/
+```
+
+The installer also removes this project's old `chatgpt-usage@samasama99` UUID if present, preventing duplicate indicators.
 
 ## Development
 
-TypeScript and GNOME type packages are development-only dependencies:
-
 ```bash
-npm install
+npm install --ignore-scripts
 npm run check
+npm run pack:store
 ```
 
-Build runtime files:
+The store package is built only from `extension/`.
 
-```bash
-npm run build
-```
+## Store readiness
 
-Package an extension zip:
+The runtime metadata uses the generic name **Quota Monitor**, UUID `quota-monitor@samasama99.github.io`, no deprecated `version` field, and stable Shell versions 46–50.
 
-```bash
-npm run pack:extension
-```
+The project uses `GPL-2.0-or-later`. `npm run store-check` validates the submission directory before packaging.
 
-The installed/runtime extension contains only JavaScript, metadata, and a tiny stylesheet.
+Before an actual submission, smoke-test the exact ZIP on at least one GNOME 46 machine and one GNOME 50 machine.
 
-## Source layout
+## Security
 
-```text
-src/
-  extension.ts   lifecycle + suspend/resume hook
-  ui.ts          panel and popup
-  poller.ts      one-shot adaptive scheduling
-  api.ts         usage request and error classification
-  http.ts        small libsoup 3 wrapper
-  auth.ts        read-only Codex auth loading
-  model.ts       runtime response validation + formatting
-  schedule.ts    pure timing policy
-
-extension/       prebuilt files installed on user machines
-tests/           Node tests for pure parsing/scheduling logic
-```
-
-## Network and privacy
-
-The extension makes only this usage request:
+The only authenticated network request is:
 
 ```text
 GET https://chatgpt.com/backend-api/wham/usage
 ```
 
-Authentication is inherited from Codex using the local OAuth access token and, when present, the ChatGPT account ID.
-
-The endpoint is an internal ChatGPT/Codex endpoint rather than a documented public API. `model.ts` deliberately isolates and validates its response shape so an upstream format change becomes a clean UI error instead of a Shell crash.
-
-Nothing is sent to third parties. Tokens are never logged.
-
-## Panel position
-
-The indicator is added at position `0` of GNOME's right panel box, placing it near the center side of the system-status area. Change this line in `src/extension.ts` if you prefer another position:
-
-```ts
-Main.panel.addToStatusArea(this.uuid, this.indicator.button, 0, 'right');
-```
-
-## GNOME compatibility
-
-`metadata.json` declares GNOME Shell 46, 47, 48, 49, and 50. The UI includes the small `St.BoxLayout` compatibility difference between GNOME 46/47 and GNOME 48+.
-
-Before publishing a release, manually smoke-test at least one GNOME 46 machine and one GNOME 50 machine because GNOME extensions execute inside Shell and cannot be fully runtime-tested in a generic build container.
+Tokens are never logged. See [SECURITY.md](SECURITY.md) for the threat model.
 
 ## License
 
-MIT
+GPL-2.0-or-later
