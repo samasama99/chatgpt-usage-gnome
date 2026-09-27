@@ -1,6 +1,6 @@
-UUID := chatgpt-usage@samasama99
+UUID := quota-monitor@samasama99.github.io
 
-.PHONY: build test check pack install clean
+.PHONY: build test check store-check pack install clean
 
 build:
 	npm run build
@@ -10,6 +10,9 @@ test:
 
 check:
 	npm run check
+
+store-check:
+	npm run store-check
 
 pack: build
 	cd extension && zip -qr ../$(UUID).shell-extension.zip .
