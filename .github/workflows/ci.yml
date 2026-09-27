@@ -25,5 +25,5 @@ jobs:
       - name: Install development dependencies without lifecycle scripts
         run: npm install --ignore-scripts --no-audit --no-fund
 
-      - name: Typecheck, build, test, and validate store package
+      - name: Typecheck, build, test, and scan
         run: npm run check
