@@ -6,20 +6,24 @@ import GLib from 'gi://GLib';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
+import {ModelActivityScanner} from './activity.js';
 import {UsagePoller} from './poller.js';
 import {UsageIndicator} from './ui.js';
 
 export default class ChatGPTUsageExtension extends Extension {
     private indicator: UsageIndicator | null = null;
     private poller: UsagePoller | null = null;
+    private activityScanner: ModelActivityScanner | null = null;
     private sleepSignalId = 0;
 
     override enable(): void {
         this.poller = new UsagePoller(state => this.indicator?.update(state));
+        this.activityScanner = new ModelActivityScanner();
         this.indicator = new UsageIndicator(
             GLib.build_filenamev([this.path, 'chatgpt-symbolic.svg']),
             () => this.poller?.refreshIfStale(),
             () => this.poller?.forceRefresh(),
+            () => this.activityScanner?.scan() ?? Promise.reject(new Error('Activity scanner unavailable.')),
         );
 
         Main.panel.addToStatusArea(this.uuid, this.indicator.button, 0, 'right');
@@ -31,6 +35,8 @@ export default class ChatGPTUsageExtension extends Extension {
         this.unsubscribeFromResume();
         this.poller?.stop();
         this.poller = null;
+        this.activityScanner?.clear();
+        this.activityScanner = null;
         this.indicator?.destroy();
         this.indicator = null;
     }
