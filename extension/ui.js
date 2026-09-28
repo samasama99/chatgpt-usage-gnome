@@ -5,6 +5,7 @@ import GLib from 'gi://GLib';
 import St from 'gi://St';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
+import {compactModelActivity, displayModelName, formatTokenCount} from './activity-model.js';
 import {formatAge, formatPanel, formatReset, progressFillWidth} from './model.js';
 
 const VERTICAL_PROPS = 'orientation' in St.BoxLayout.prototype
@@ -114,6 +115,105 @@ class UsageRow {
     }
 }
 
+class ModelActivitySection {
+    actor;
+    rows;
+    subtitle;
+
+    constructor() {
+        this.actor = new St.BoxLayout({
+            ...VERTICAL_PROPS,
+            style_class: 'chatgpt-activity',
+            x_expand: true,
+        });
+
+        const heading = new St.BoxLayout({
+            ...HORIZONTAL_PROPS,
+            style_class: 'chatgpt-activity-heading',
+            x_expand: true,
+        });
+        heading.add_child(new St.Label({
+            text: 'Codex model activity',
+            style_class: 'chatgpt-activity-title',
+            x_expand: true,
+        }));
+        this.subtitle = new St.Label({
+            text: 'Local · last 7 days',
+            style_class: 'chatgpt-activity-subtitle',
+            x_align: Clutter.ActorAlign.END,
+        });
+        heading.add_child(this.subtitle);
+
+        this.rows = new St.BoxLayout({
+            ...VERTICAL_PROPS,
+            style_class: 'chatgpt-activity-rows',
+            x_expand: true,
+        });
+
+        this.actor.add_child(heading);
+        this.actor.add_child(this.rows);
+        this.showLoading();
+    }
+
+    showLoading() {
+        this.clearRows();
+        this.rows.add_child(new St.Label({
+            text: 'Reading local Codex activity…',
+            style_class: 'chatgpt-activity-empty',
+        }));
+    }
+
+    showError() {
+        this.clearRows();
+        this.rows.add_child(new St.Label({
+            text: 'Local model activity unavailable',
+            style_class: 'chatgpt-activity-empty',
+        }));
+    }
+
+    update(snapshot) {
+        this.clearRows();
+        this.subtitle.text = `Local · ${snapshot.windowDays} days · ${formatTokenCount(snapshot.totalTokens)} tokens`;
+
+        const rows = compactModelActivity(snapshot, 4);
+        if (rows.length === 0) {
+            this.rows.add_child(new St.Label({
+                text: 'No recent local Codex activity found',
+                style_class: 'chatgpt-activity-empty',
+            }));
+            return;
+        }
+
+        for (const row of rows) {
+            const actor = new St.BoxLayout({
+                ...HORIZONTAL_PROPS,
+                style_class: 'chatgpt-activity-row',
+                x_expand: true,
+            });
+
+            actor.add_child(new St.Label({
+                text: displayModelName(row.model),
+                style_class: 'chatgpt-activity-model',
+                x_expand: true,
+                x_align: Clutter.ActorAlign.START,
+            }));
+
+            actor.add_child(new St.Label({
+                text: `${Math.round(row.sharePercent)}% · ${formatTokenCount(row.tokens)}`,
+                style_class: 'chatgpt-activity-value',
+                x_align: Clutter.ActorAlign.END,
+            }));
+
+            this.rows.add_child(actor);
+        }
+    }
+
+    clearRows() {
+        for (const child of this.rows.get_children())
+            child.destroy();
+    }
+}
+
 function errorText(error) {
     if (error === null)
         return '';
@@ -149,13 +249,18 @@ export class UsageIndicator {
     footerLabel;
     onOpen;
     onRefresh;
+    onLoadActivity;
+    activitySection;
     state = null;
     popupTickId = 0;
     openStateSignalId = 0;
+    activityRequestId = 0;
+    destroyed = false;
 
-    constructor(iconPath, onOpen, onRefresh) {
+    constructor(iconPath, onOpen, onRefresh, onLoadActivity) {
         this.onOpen = onOpen;
         this.onRefresh = onRefresh;
+        this.onLoadActivity = onLoadActivity;
         this.serviceIcon = new Gio.FileIcon({
             file: Gio.File.new_for_path(iconPath),
         });
@@ -229,6 +334,8 @@ export class UsageIndicator {
         this.fiveHourRow = new UsageRow('5-hour');
         this.weeklyRow = new UsageRow('Weekly');
 
+        this.activitySection = new ModelActivitySection();
+
         this.errorLabel = new St.Label({
             text: '',
             style_class: 'chatgpt-error',
@@ -243,6 +350,12 @@ export class UsageIndicator {
         content.add_child(header);
         content.add_child(this.fiveHourRow.actor);
         content.add_child(this.weeklyRow.actor);
+        content.add_child(new St.Widget({
+            style_class: 'chatgpt-section-divider',
+            height: 1,
+            x_expand: true,
+        }));
+        content.add_child(this.activitySection.actor);
         content.add_child(this.errorLabel);
         content.add_child(this.footerLabel);
         contentItem.add_child(content);
@@ -259,6 +372,7 @@ export class UsageIndicator {
             (_menu, open) => {
                 if (open) {
                     this.onOpen();
+                    this.refreshActivity();
                     this.startPopupTick();
                     this.render();
                 } else {
@@ -294,6 +408,21 @@ export class UsageIndicator {
         this.footerLabel.text = this.state.updating ? `Updating…  ·  ${age}` : age;
     }
 
+    refreshActivity() {
+        const requestId = ++this.activityRequestId;
+        this.activitySection.showLoading();
+
+        void this.onLoadActivity()
+            .then(snapshot => {
+                if (!this.destroyed && requestId === this.activityRequestId)
+                    this.activitySection.update(snapshot);
+            })
+            .catch(() => {
+                if (!this.destroyed && requestId === this.activityRequestId)
+                    this.activitySection.showError();
+            });
+    }
+
     startPopupTick() {
         this.stopPopupTick();
         this.popupTickId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 60, () => {
@@ -310,6 +439,8 @@ export class UsageIndicator {
     }
 
     destroy() {
+        this.destroyed = true;
+        this.activityRequestId += 1;
         this.stopPopupTick();
         if (this.openStateSignalId !== 0) {
             this.button.menu.disconnect(this.openStateSignalId);
