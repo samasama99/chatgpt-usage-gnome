@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import {detectedConsumption, formatPanel, parseUsageResponse} from '../extension/model.js';
+import {detectedConsumption, formatPanel, parseUsageResponse, progressFillWidth} from '../extension/model.js';
 
 test('parses primary and secondary windows', () => {
     const snapshot = parseUsageResponse({
@@ -70,4 +70,23 @@ test('resets and rollbacks do not count as activity', () => {
     });
 
     assert.equal(detectedConsumption(previous, reset), false);
+});
+
+
+test('progress bar width is exact at boundaries', () => {
+    const width = 252;
+
+    assert.equal(progressFillWidth(width, 0), 0);
+    assert.equal(progressFillWidth(width, 1), 3);
+    assert.equal(progressFillWidth(width, 5), 13);
+    assert.equal(progressFillWidth(width, 50), 126);
+    assert.equal(progressFillWidth(width, 99), 249);
+    assert.equal(progressFillWidth(width, 100), width);
+    assert.equal(progressFillWidth(width, 120), width);
+});
+
+test('progress bar follows the actual allocated width', () => {
+    assert.equal(progressFillWidth(241, 100), 241);
+    assert.equal(progressFillWidth(241, 50), 121);
+    assert.equal(progressFillWidth(0, 100), 0);
 });
