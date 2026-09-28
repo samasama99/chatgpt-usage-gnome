@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import {parseCodexRollout, summarizeModelActivity} from '../extension/activity.js';
+import {parseCodexRollout, summarizeModelActivity} from '../extension/activity-model.js';
 
 const line = (timestamp, type, payload) => JSON.stringify({timestamp, type, payload});
 
