@@ -15,6 +15,18 @@ The extension:
 - runs no daemon, helper server, Node.js runtime, Python process, or Rust process;
 - sends no intentional analytics or telemetry.
 
+## Local session metadata
+
+The optional model-activity section reads recent Codex rollout JSONL files under `$CODEX_HOME/sessions` or `~/.codex/sessions` only when the popup is opened.
+
+The parser extracts only:
+
+- rollout timestamps;
+- turn IDs and model names from `turn_context` records;
+- response token totals from `token_usage_record` records.
+
+Prompt text, assistant responses, tool arguments/results, shell output, and workspace contents are ignored. The derived model totals remain in memory and are never transmitted.
+
 ## Trust boundary
 
 The extension trusts the local GNOME user session, the local Codex credential file, the operating-system TLS stack, and `chatgpt.com`.
