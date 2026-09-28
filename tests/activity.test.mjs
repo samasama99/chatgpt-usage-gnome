@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import {parseCodexRollout, summarizeModelActivity} from '../extension/activity-model.js';
+import {compactModelActivity, displayModelName, formatTokenCount, parseCodexRollout, summarizeModelActivity} from '../extension/activity-model.js';
 
 const line = (timestamp, type, payload) => JSON.stringify({timestamp, type, payload});
 
@@ -54,4 +54,35 @@ test('summarizes models by recent token usage and sorts descending', () => {
     assert.deepEqual(snapshot.models.map(model => model.model), ['gpt-5.6-sol', 'gpt-5.6-codex']);
     assert.equal(snapshot.models[0]?.sharePercent, 70);
     assert.equal(snapshot.models[1]?.sharePercent, 30);
+});
+
+
+test('compacts long model lists into Other', () => {
+    const snapshot = {
+        totalTokens: 1000,
+        scannedAtMs: 0,
+        windowDays: 7,
+        models: [
+            {model: 'a', tokens: 400, sharePercent: 40},
+            {model: 'b', tokens: 250, sharePercent: 25},
+            {model: 'c', tokens: 150, sharePercent: 15},
+            {model: 'd', tokens: 120, sharePercent: 12},
+            {model: 'e', tokens: 80, sharePercent: 8},
+        ],
+    };
+
+    assert.deepEqual(compactModelActivity(snapshot, 4), [
+        {model: 'a', tokens: 400, sharePercent: 40},
+        {model: 'b', tokens: 250, sharePercent: 25},
+        {model: 'c', tokens: 150, sharePercent: 15},
+        {model: 'Other', tokens: 200, sharePercent: 20},
+    ]);
+});
+
+test('formats compact token counts and model names', () => {
+    assert.equal(formatTokenCount(999), '999');
+    assert.equal(formatTokenCount(1_250), '1.3K');
+    assert.equal(formatTokenCount(1_250_000), '1.3M');
+    assert.equal(displayModelName('gpt-5.6-sol'), 'GPT-5.6 Sol');
+    assert.equal(displayModelName('gpt-5.6-codex'), 'GPT-5.6 Codex');
 });
