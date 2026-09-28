@@ -3,169 +3,22 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
+import {
+    parseCodexRollout,
+    summarizeModelActivity,
+    type ModelActivitySnapshot,
+    type TokenRecord,
+} from './activity-model.js';
+
 Gio._promisify(Gio.File.prototype, 'load_contents_async', 'load_contents_finish');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_WINDOW_DAYS = 7;
 
-export interface ModelActivity {
-    readonly model: string;
-    readonly tokens: number;
-    readonly sharePercent: number;
-}
-
-export interface ModelActivitySnapshot {
-    readonly models: readonly ModelActivity[];
-    readonly totalTokens: number;
-    readonly scannedAtMs: number;
-    readonly windowDays: number;
-}
-
-interface TokenRecord {
-    readonly timestampMs: number;
-    readonly model: string;
-    readonly tokens: number;
-}
-
 interface CachedFile {
     readonly size: number;
     readonly modifiedSeconds: number;
     readonly records: readonly TokenRecord[];
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-    return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function finiteNumber(value: unknown): number | null {
-    return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-
-function lineItem(value: unknown): Record<string, unknown> | null {
-    if (!isRecord(value))
-        return null;
-
-    if (typeof value.type === 'string')
-        return value;
-
-    return isRecord(value.item) ? value.item : null;
-}
-
-function lineTimestampMs(value: unknown): number | null {
-    if (!isRecord(value))
-        return null;
-
-    const timestamp = value.timestamp;
-    if (typeof timestamp !== 'string')
-        return null;
-
-    const parsed = Date.parse(timestamp);
-    return Number.isFinite(parsed) ? parsed : null;
-}
-
-function parseJsonLine(line: string): unknown | null {
-    if (!line.trim())
-        return null;
-
-    try {
-        return JSON.parse(line) as unknown;
-    } catch {
-        return null;
-    }
-}
-
-export function parseCodexRollout(text: string): readonly TokenRecord[] {
-    const turnModels = new Map<string, string>();
-    const pending: Array<{timestampMs: number; turnId: string; tokens: number}> = [];
-
-    for (const rawLine of text.split('\n')) {
-        const value = parseJsonLine(rawLine);
-        if (value === null)
-            continue;
-
-        const item = lineItem(value);
-        if (item === null)
-            continue;
-
-        const type = item.type;
-        const payload = item.payload;
-        if (typeof type !== 'string' || !isRecord(payload))
-            continue;
-
-        if (type === 'turn_context') {
-            const turnId = payload.turn_id;
-            const model = payload.model;
-            if (typeof turnId === 'string' && turnId && typeof model === 'string' && model)
-                turnModels.set(turnId, model);
-            continue;
-        }
-
-        if (type !== 'token_usage_record')
-            continue;
-
-        const turnId = payload.turn_id;
-        const usage = payload.usage;
-        const timestampMs = lineTimestampMs(value);
-
-        if (typeof turnId !== 'string' || !turnId || !isRecord(usage) || timestampMs === null)
-            continue;
-
-        const totalTokens = finiteNumber(usage.total_tokens);
-        if (totalTokens === null || totalTokens <= 0)
-            continue;
-
-        pending.push({
-            timestampMs,
-            turnId,
-            tokens: Math.trunc(totalTokens),
-        });
-    }
-
-    const records: TokenRecord[] = [];
-    for (const record of pending) {
-        const model = turnModels.get(record.turnId);
-        if (!model)
-            continue;
-
-        records.push({
-            timestampMs: record.timestampMs,
-            model,
-            tokens: record.tokens,
-        });
-    }
-
-    return records;
-}
-
-export function summarizeModelActivity(
-    records: readonly TokenRecord[],
-    nowMs = Date.now(),
-    windowDays = DEFAULT_WINDOW_DAYS,
-): ModelActivitySnapshot {
-    const cutoffMs = nowMs - windowDays * DAY_MS;
-    const totals = new Map<string, number>();
-
-    for (const record of records) {
-        if (record.timestampMs < cutoffMs || record.timestampMs > nowMs + 60_000)
-            continue;
-        totals.set(record.model, (totals.get(record.model) ?? 0) + record.tokens);
-    }
-
-    const totalTokens = [...totals.values()].reduce((sum, value) => sum + value, 0);
-    const models = [...totals.entries()]
-        .map(([model, tokens]) => ({
-            model,
-            tokens,
-            sharePercent: totalTokens > 0 ? tokens / totalTokens * 100 : 0,
-        }))
-        .sort((a, b) => b.tokens - a.tokens || a.model.localeCompare(b.model));
-
-    return {
-        models,
-        totalTokens,
-        scannedAtMs: nowMs,
-        windowDays,
-    };
 }
 
 function codexHome(): string {
@@ -189,8 +42,6 @@ function candidateSessionDirectories(nowMs: number, windowDays: number): readonl
     const root = GLib.build_filenamev([codexHome(), 'sessions']);
     const directories = new Set<string>();
 
-    // Include one extra day because timezone boundaries can put a recent rollout
-    // in the neighboring UTC/local calendar directory.
     for (let offset = 0; offset <= windowDays; offset++) {
         const date = new Date(nowMs - offset * DAY_MS);
         for (const utc of [false, true]) {
@@ -238,7 +89,7 @@ function rolloutFilesInDirectory(path: string): Array<{path: string; size: numbe
         try {
             enumerator?.close(null);
         } catch {
-            // Directory may have disappeared while scanning.
+            // A live session directory may disappear while being scanned.
         }
     }
 
@@ -273,14 +124,13 @@ export class ModelActivityScanner {
 
                 try {
                     const [contents] = await Gio.File.new_for_path(file.path).load_contents_async(null);
-                    const text = new TextDecoder().decode(contents);
                     this.cache.set(file.path, {
                         size: file.size,
                         modifiedSeconds: file.modifiedSeconds,
-                        records: parseCodexRollout(text),
+                        records: parseCodexRollout(new TextDecoder().decode(contents)),
                     });
                 } catch {
-                    // A live rollout may be replaced/moved while scanning. Ignore it until next open.
+                    // Ignore a rollout that is replaced/moved while scanning; retry next open.
                 }
             }
         }
