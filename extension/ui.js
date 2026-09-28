@@ -5,9 +5,8 @@ import GLib from 'gi://GLib';
 import St from 'gi://St';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
-import {formatAge, formatPanel, formatReset} from './model.js';
+import {formatAge, formatPanel, formatReset, progressFillWidth} from './model.js';
 
-const PROGRESS_WIDTH = 252;
 const VERTICAL_PROPS = 'orientation' in St.BoxLayout.prototype
     ? {orientation: Clutter.Orientation.VERTICAL}
     : {vertical: true};
@@ -18,12 +17,14 @@ const HORIZONTAL_PROPS = 'orientation' in St.BoxLayout.prototype
 class ProgressBar {
     actor;
     fill;
+    percent = 0;
 
     constructor() {
         this.actor = new St.BoxLayout({
             ...HORIZONTAL_PROPS,
             style_class: 'chatgpt-progress-track',
-            width: PROGRESS_WIDTH,
+            x_expand: true,
+            x_align: Clutter.ActorAlign.FILL,
             height: 5,
         });
         this.fill = new St.Widget({
@@ -31,19 +32,24 @@ class ProgressBar {
             height: 5,
         });
         this.actor.add_child(this.fill);
+        this.actor.connect('notify::width', () => this.syncWidth());
         this.update(0);
     }
 
     update(remainingPercent) {
-        const percent = Math.max(0, Math.min(100, remainingPercent));
-        this.fill.width = Math.round(PROGRESS_WIDTH * percent / 100);
+        this.percent = Math.max(0, Math.min(100, remainingPercent));
+        this.syncWidth();
 
-        if (percent <= 10)
+        if (this.percent <= 10)
             this.fill.set_style_class_name('chatgpt-progress-fill chatgpt-progress-critical');
-        else if (percent <= 25)
+        else if (this.percent <= 25)
             this.fill.set_style_class_name('chatgpt-progress-fill chatgpt-progress-warning');
         else
             this.fill.set_style_class_name('chatgpt-progress-fill');
+    }
+
+    syncWidth() {
+        this.fill.width = progressFillWidth(this.actor.width, this.percent);
     }
 }
 
