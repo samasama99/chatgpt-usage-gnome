@@ -31,6 +31,16 @@ Any new consumption restarts the sequence at 8 seconds. A quota reset is not tre
 
 The extension also refreshes immediately on startup, after resume, at a known reset boundary, and when the popup is opened with stale data. Failures back off to 60s → 120s → 240s → 300s, and HTTP 429 honors `Retry-After`.
 
+## Local model activity
+
+When the popup opens, the extension also reads recent **local Codex session metadata** from `$CODEX_HOME/sessions` (or `~/.codex/sessions`) and shows a 7-day model breakdown sorted by token activity.
+
+This section is intentionally labeled local. It is not an attribution of your ChatGPT subscription quota and it does not include activity from ChatGPT web/mobile or other computers.
+
+Only the metadata needed for the summary is used: timestamps, turn IDs, model names, and token totals. Prompts, responses, tool contents, and file contents are not displayed or sent anywhere.
+
+Session files are cached in memory by modification time and size, so unchanged files are not reparsed every time the popup opens. No activity database or persistent cache is created.
+
 ## Install
 
 ```bash
