@@ -5,7 +5,7 @@ import {HttpClient} from './http.js';
 import {parseUsageResponse, type UsageSnapshot} from './model.js';
 
 const USAGE_URL = 'https://chatgpt.com/backend-api/wham/usage';
-const USER_AGENT = 'chatgpt-usage-gnome/0.3';
+const USER_AGENT = 'chatgpt-usage-gnome/0.4';
 
 export type FetchErrorKind = 'auth' | 'rate-limit' | 'network' | 'server' | 'invalid-response';
 
