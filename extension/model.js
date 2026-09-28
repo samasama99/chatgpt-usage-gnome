@@ -116,6 +116,21 @@ export function detectedConsumption(previous, next) {
     return windowShowsConsumption(previous.fiveHour, next.fiveHour) ||
         windowShowsConsumption(previous.weekly, next.weekly);
 }
+export function progressFillWidth(trackWidth, remainingPercent) {
+    if (!Number.isFinite(trackWidth) || trackWidth <= 0)
+        return 0;
+
+    const width = Math.max(0, Math.floor(trackWidth));
+    const percent = Math.max(0, Math.min(100, remainingPercent));
+
+    if (percent <= 0)
+        return 0;
+    if (percent >= 100)
+        return width;
+
+    return Math.min(width, Math.max(0, Math.round(width * percent / 100)));
+}
+
 export function formatPanel(snapshot) {
     if (snapshot === null)
         return '5h -- · W --';
