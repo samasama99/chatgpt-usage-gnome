@@ -9,10 +9,8 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
 import type {FetchFailure} from './api.js';
-import {formatAge, formatPanel, formatReset, type UsageSnapshot, type UsageWindow} from './model.js';
+import {formatAge, formatPanel, formatReset, progressFillWidth, type UsageSnapshot, type UsageWindow} from './model.js';
 import type {PollerState} from './poller.js';
-
-const PROGRESS_WIDTH = 252;
 
 const VERTICAL_PROPS = 'orientation' in St.BoxLayout.prototype
     ? {orientation: Clutter.Orientation.VERTICAL}
@@ -28,12 +26,14 @@ type RefreshListener = () => void;
 class ProgressBar {
     readonly actor: St.BoxLayout;
     private readonly fill: St.Widget;
+    private percent = 0;
 
     constructor() {
         this.actor = new St.BoxLayout({
             ...HORIZONTAL_PROPS,
             style_class: 'chatgpt-progress-track',
-            width: PROGRESS_WIDTH,
+            x_expand: true,
+            x_align: Clutter.ActorAlign.FILL,
             height: 5,
         } as never);
         this.fill = new St.Widget({
@@ -41,19 +41,27 @@ class ProgressBar {
             height: 5,
         });
         this.actor.add_child(this.fill);
+
+        // GNOME may allocate a slightly different width than the requested popup/card
+        // width. Derive the fill from the real allocation so 100% is truly edge-to-edge.
+        this.actor.connect('notify::width', () => this.syncWidth());
         this.update(0);
     }
 
     update(remainingPercent: number): void {
-        const percent = Math.max(0, Math.min(100, remainingPercent));
-        this.fill.width = Math.round(PROGRESS_WIDTH * percent / 100);
+        this.percent = Math.max(0, Math.min(100, remainingPercent));
+        this.syncWidth();
 
-        if (percent <= 10)
+        if (this.percent <= 10)
             this.fill.set_style_class_name('chatgpt-progress-fill chatgpt-progress-critical');
-        else if (percent <= 25)
+        else if (this.percent <= 25)
             this.fill.set_style_class_name('chatgpt-progress-fill chatgpt-progress-warning');
         else
             this.fill.set_style_class_name('chatgpt-progress-fill');
+    }
+
+    private syncWidth(): void {
+        this.fill.width = progressFillWidth(this.actor.width, this.percent);
     }
 }
 
