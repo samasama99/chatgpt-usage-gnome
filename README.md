@@ -16,7 +16,7 @@ Click the indicator to see the 5-hour and weekly windows, progress bars, reset c
 - Reads `$CODEX_HOME/auth.json`, `~/.codex/auth.json`, or `~/.config/codex/auth.json`.
 - Talks directly from GNOME Shell to `chatgpt.com`.
 - Stores no tokens, usage history, analytics, or telemetry.
-- Runs no daemon, helper server, Node.js runtime, Python process, or Rust process.
+- Runs no daemon or helper server. If OpenCode is installed, the popup may invoke `opencode stats` with fixed arguments to read its local 7-day model totals.
 - Supports GNOME Shell 46–50.
 
 ## Polling
@@ -33,13 +33,16 @@ The extension also refreshes immediately on startup, after resume, at a known re
 
 ## Local model activity
 
-When the popup opens, the extension also reads recent **local Codex session metadata** from `$CODEX_HOME/sessions` (or `~/.codex/sessions`) and shows a 7-day model breakdown sorted by token activity.
+When the popup opens, the extension shows a 7-day **Local model activity** breakdown. It combines:
 
-This section is intentionally labeled local. It is not an attribution of your ChatGPT subscription quota and it does not include activity from ChatGPT web/mobile or other computers.
+- Codex rollout metadata from `$CODEX_HOME/sessions` or `~/.codex/sessions`;
+- OpenAI/ChatGPT model totals from OpenCode when an `opencode` executable is available.
 
-Only the metadata needed for the summary is used: timestamps, turn IDs, model names, and token totals. Prompts, responses, tool contents, and file contents are not displayed or sent anywhere.
+OpenCode support uses the public `opencode stats --days 7 --models` command with a fixed argument vector (no shell). Non-OpenAI providers in the OpenCode output are ignored. The result is cached in memory for 60 seconds so repeatedly opening the popup does not repeatedly start OpenCode.
 
-Session files are cached in memory by modification time and size, so unchanged files are not reparsed every time the popup opens. No activity database or persistent cache is created.
+This section is intentionally labeled local. It is not an attribution of your ChatGPT subscription quota and it does not include ChatGPT web/mobile activity or activity from other computers.
+
+For Codex, only timestamps, turn IDs, model names, and token totals are extracted. Prompts, responses, tool contents, and file contents are not displayed or sent anywhere. No activity database or persistent cache is created.
 
 ## Install
 
