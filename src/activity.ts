@@ -4,13 +4,16 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
 import {
+    mergeModelActivity,
     parseCodexRollout,
+    parseOpenCodeStats,
     summarizeModelActivity,
     type ModelActivitySnapshot,
     type TokenRecord,
 } from './activity-model.js';
 
 Gio._promisify(Gio.File.prototype, 'load_contents_async', 'load_contents_finish');
+Gio._promisify(Gio.Subprocess.prototype, 'communicate_utf8_async', 'communicate_utf8_finish');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_WINDOW_DAYS = 7;
@@ -98,7 +101,9 @@ function rolloutFilesInDirectory(path: string): Array<{path: string; size: numbe
 
 export class ModelActivityScanner {
     private readonly cache = new Map<string, CachedFile>();
+    private readonly openCodePath = GLib.find_program_in_path('opencode');
     private inFlight: Promise<ModelActivitySnapshot> | null = null;
+    private openCodeCache: {atMs: number; totals: ReadonlyMap<string, number>} | null = null;
 
     scan(windowDays = DEFAULT_WINDOW_DAYS): Promise<ModelActivitySnapshot> {
         if (this.inFlight !== null)
@@ -144,10 +149,40 @@ export class ModelActivityScanner {
         for (const cached of this.cache.values())
             records.push(...cached.records);
 
-        return summarizeModelActivity(records, nowMs, windowDays);
+        const codex = summarizeModelActivity(records, nowMs, windowDays);
+        const openCodeTotals = await this.readOpenCodeStats(windowDays, nowMs);
+        return mergeModelActivity(codex, openCodeTotals);
+    }
+
+    private async readOpenCodeStats(windowDays: number, nowMs: number): Promise<ReadonlyMap<string, number>> {
+        if (!this.openCodePath)
+            return new Map();
+
+        // Avoid repeatedly starting OpenCode if the popup is opened several times in
+        // quick succession. Manual refresh still refreshes quota data immediately.
+        if (this.openCodeCache !== null && nowMs - this.openCodeCache.atMs < 60_000)
+            return this.openCodeCache.totals;
+
+        try {
+            const process = Gio.Subprocess.new(
+                [this.openCodePath, 'stats', '--days', String(windowDays), '--models'],
+                Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE,
+            );
+
+            const [, stdout] = await process.communicate_utf8_async(null, null);
+            if (!process.get_successful() || typeof stdout !== 'string')
+                return new Map();
+
+            const totals = parseOpenCodeStats(stdout);
+            this.openCodeCache = {atMs: nowMs, totals};
+            return totals;
+        } catch {
+            return new Map();
+        }
     }
 
     clear(): void {
         this.cache.clear();
+        this.openCodeCache = null;
     }
 }
