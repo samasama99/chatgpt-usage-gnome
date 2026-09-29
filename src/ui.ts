@@ -15,7 +15,7 @@ import {
     type ModelActivitySnapshot,
 } from './activity-model.js';
 import type {FetchFailure} from './api.js';
-import {formatAge, formatPanel, formatReset, progressFillWidth, type UsageSnapshot, type UsageWindow} from './model.js';
+import {formatAge, formatPanel, formatReset, progressScale, type UsageSnapshot, type UsageWindow} from './model.js';
 import type {PollerState} from './poller.js';
 
 const VERTICAL_PROPS = 'orientation' in St.BoxLayout.prototype
@@ -31,44 +31,42 @@ type RefreshListener = () => void;
 type ActivityLoader = () => Promise<ModelActivitySnapshot>;
 
 class ProgressBar {
-    readonly actor: St.BoxLayout;
+    readonly actor: St.Bin;
     private readonly fill: St.Widget;
-    private percent = 0;
 
     constructor() {
-        this.actor = new St.BoxLayout({
-            ...HORIZONTAL_PROPS,
+        this.fill = new St.Widget({
+            style_class: 'chatgpt-progress-fill',
+            x_expand: true,
+            x_align: Clutter.ActorAlign.FILL,
+            height: 5,
+        });
+        this.fill.set_pivot_point(0, 0.5);
+
+        this.actor = new St.Bin({
             style_class: 'chatgpt-progress-track',
             x_expand: true,
             x_align: Clutter.ActorAlign.FILL,
             height: 5,
-        } as never);
-        this.fill = new St.Widget({
-            style_class: 'chatgpt-progress-fill',
-            height: 5,
         });
-        this.actor.add_child(this.fill);
-
-        // GNOME may allocate a slightly different width than the requested popup/card
-        // width. Derive the fill from the real allocation so 100% is truly edge-to-edge.
-        this.actor.connect('notify::width', () => this.syncWidth());
+        this.actor.set_child(this.fill);
         this.update(0);
     }
 
     update(remainingPercent: number): void {
-        this.percent = Math.max(0, Math.min(100, remainingPercent));
-        this.syncWidth();
+        const percent = Math.max(0, Math.min(100, remainingPercent));
 
-        if (this.percent <= 10)
+        // Keep the child allocated at the full track width and only transform the
+        // painted width. This avoids a preferred-size feedback loop in St.BoxLayout
+        // that made the bar change size each time the popup was reopened.
+        this.fill.scale_x = progressScale(percent);
+
+        if (percent <= 10)
             this.fill.set_style_class_name('chatgpt-progress-fill chatgpt-progress-critical');
-        else if (this.percent <= 25)
+        else if (percent <= 25)
             this.fill.set_style_class_name('chatgpt-progress-fill chatgpt-progress-warning');
         else
             this.fill.set_style_class_name('chatgpt-progress-fill');
-    }
-
-    private syncWidth(): void {
-        this.fill.width = progressFillWidth(this.actor.width, this.percent);
     }
 }
 
@@ -365,7 +363,30 @@ export class UsageIndicator {
         this.footerLabel = new St.Label({
             text: 'Not updated yet',
             style_class: 'chatgpt-footer',
+            x_expand: true,
+            y_align: Clutter.ActorAlign.CENTER,
         });
+
+        const footer = new St.BoxLayout({
+            ...HORIZONTAL_PROPS,
+            style_class: 'chatgpt-footer-row',
+            x_expand: true,
+        } as never);
+        footer.add_child(this.footerLabel);
+
+        const refreshButton = new St.Button({
+            label: 'Refresh',
+            style_class: 'chatgpt-refresh-button',
+            can_focus: true,
+            reactive: true,
+            track_hover: true,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        refreshButton.connect('clicked', () => {
+            this.onRefresh();
+            this.refreshActivity();
+        });
+        footer.add_child(refreshButton);
 
         content.add_child(header);
         content.add_child(this.fiveHourRow.actor);
@@ -377,15 +398,10 @@ export class UsageIndicator {
         }));
         content.add_child(this.activitySection.actor);
         content.add_child(this.errorLabel);
-        content.add_child(this.footerLabel);
+        content.add_child(footer);
         contentItem.add_child(content);
 
         (this.button.menu as any).addMenuItem(contentItem);
-        (this.button.menu as any).addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-
-        const refreshItem = new PopupMenu.PopupMenuItem('Refresh usage');
-        refreshItem.connect('activate', () => this.onRefresh());
-        (this.button.menu as any).addMenuItem(refreshItem);
 
         this.openStateSignalId = (this.button.menu as any).connect(
             'open-state-changed',
