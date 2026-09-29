@@ -2,9 +2,10 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
-import {parseCodexRollout, summarizeModelActivity} from './activity-model.js';
+import {mergeModelActivity, parseCodexRollout, parseOpenCodeStats, summarizeModelActivity} from './activity-model.js';
 
 Gio._promisify(Gio.File.prototype, 'load_contents_async', 'load_contents_finish');
+Gio._promisify(Gio.Subprocess.prototype, 'communicate_utf8_async', 'communicate_utf8_finish');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_WINDOW_DAYS = 7;
@@ -86,7 +87,9 @@ function rolloutFilesInDirectory(path) {
 
 export class ModelActivityScanner {
     cache = new Map();
+    openCodePath = GLib.find_program_in_path('opencode');
     inFlight = null;
+    openCodeCache = null;
 
     scan(windowDays = DEFAULT_WINDOW_DAYS) {
         if (this.inFlight !== null)
@@ -132,10 +135,38 @@ export class ModelActivityScanner {
         for (const cached of this.cache.values())
             records.push(...cached.records);
 
-        return summarizeModelActivity(records, nowMs, windowDays);
+        const codex = summarizeModelActivity(records, nowMs, windowDays);
+        const openCodeTotals = await this.readOpenCodeStats(windowDays, nowMs);
+        return mergeModelActivity(codex, openCodeTotals);
+    }
+
+    async readOpenCodeStats(windowDays, nowMs) {
+        if (!this.openCodePath)
+            return new Map();
+
+        if (this.openCodeCache !== null && nowMs - this.openCodeCache.atMs < 60_000)
+            return this.openCodeCache.totals;
+
+        try {
+            const process = Gio.Subprocess.new(
+                [this.openCodePath, 'stats', '--days', String(windowDays), '--models'],
+                Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE,
+            );
+
+            const [, stdout] = await process.communicate_utf8_async(null, null);
+            if (!process.get_successful() || typeof stdout !== 'string')
+                return new Map();
+
+            const totals = parseOpenCodeStats(stdout);
+            this.openCodeCache = {atMs: nowMs, totals};
+            return totals;
+        } catch {
+            return new Map();
+        }
     }
 
     clear() {
         this.cache.clear();
+        this.openCodeCache = null;
     }
 }
