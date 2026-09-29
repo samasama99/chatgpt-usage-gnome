@@ -3,5 +3,12 @@
   "description": "Shows ChatGPT short-term and weekly usage limits in the GNOME panel.",
   "uuid": "chatgpt-usage@samasama99",
   "url": "https://github.com/samasama99/chatgpt-usage-gnome",
-  "shell-version": ["46", "47", "48", "49", "50"]
+  "shell-version": [
+    "46",
+    "47",
+    "48",
+    "49",
+    "50"
+  ],
+  "settings-schema": "org.gnome.shell.extensions.chatgpt-usage"
 }
