@@ -138,3 +138,18 @@
 .chatgpt-activity-value {
     font-variant-numeric: tabular-nums;
 }
+
+.chatgpt-footer-row {
+    spacing: 8px;
+}
+
+.chatgpt-refresh-button {
+    padding: 4px 9px;
+    border-radius: 8px;
+    background-color: rgba(255, 255, 255, 0.07);
+}
+
+.chatgpt-refresh-button:hover,
+.chatgpt-refresh-button:focus {
+    background-color: rgba(255, 255, 255, 0.12);
+}
