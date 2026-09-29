@@ -90,6 +90,7 @@ export class ModelActivityScanner {
     openCodePath = GLib.find_program_in_path('opencode');
     inFlight = null;
     openCodeCache = null;
+    openCodeProcess = null;
 
     scan(windowDays = DEFAULT_WINDOW_DAYS) {
         if (this.inFlight !== null)
@@ -141,7 +142,8 @@ export class ModelActivityScanner {
     }
 
     async readOpenCodeStats(windowDays, nowMs) {
-        if (!this.openCodePath)
+        const executable = this.openCodePath;
+        if (!executable)
             return new Map();
 
         if (this.openCodeCache !== null && nowMs - this.openCodeCache.atMs < 60_000)
@@ -149,9 +151,10 @@ export class ModelActivityScanner {
 
         try {
             const process = Gio.Subprocess.new(
-                [this.openCodePath, 'stats', '--days', String(windowDays), '--models'],
+                [executable, 'stats', '--days', String(windowDays), '--models'],
                 Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE,
             );
+            this.openCodeProcess = process;
 
             const [, stdout] = await process.communicate_utf8_async(null, null);
             if (!process.get_successful() || typeof stdout !== 'string')
@@ -162,10 +165,14 @@ export class ModelActivityScanner {
             return totals;
         } catch {
             return new Map();
+        } finally {
+            this.openCodeProcess = null;
         }
     }
 
     clear() {
+        this.openCodeProcess?.force_exit();
+        this.openCodeProcess = null;
         this.cache.clear();
         this.openCodeCache = null;
     }
