@@ -19,6 +19,23 @@ Click the indicator to see the 5-hour and weekly windows, progress bars, reset c
 - Runs no daemon or helper server. If OpenCode is installed, the popup may invoke `opencode stats` with fixed arguments to read its local 7-day model totals.
 - Supports GNOME Shell 46–50.
 
+## Preferences
+
+Open **Settings** from the extension popup, or run:
+
+```bash
+gnome-extensions prefs chatgpt-usage@samasama99
+```
+
+Available options:
+
+- **Show ChatGPT icon** — hide the panel icon and keep only the usage text.
+- **Panel position** — move the indicator to the left, center, or right GNOME panel box.
+- **Panel background** — enable a rounded colored background behind the indicator and choose a `#RRGGBB` color.
+- **Show local coding activity** — hide the local Codex/OpenCode section and completely skip local session scanning / OpenCode stats while disabled.
+
+Settings apply live; the extension does not need to be restarted.
+
 ## Polling
 
 Idle polling is **60 seconds**. When fresh consumption is detected in either quota window, the extension temporarily becomes more responsive:
