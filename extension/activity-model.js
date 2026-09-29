@@ -94,7 +94,106 @@ export function summarizeModelActivity(records, nowMs = Date.now(), windowDays =
         }))
         .sort((a, b) => b.tokens - a.tokens || a.model.localeCompare(b.model));
 
-    return {models, totalTokens, scannedAtMs: nowMs, windowDays};
+    return {models, totalTokens, scannedAtMs: nowMs, windowDays, sources: ['Codex']};
+}
+
+function parseCompactNumber(value) {
+    const match = value.trim().match(/^([0-9]+(?:\.[0-9]+)?)([KMB])?$/i);
+    if (!match)
+        return null;
+
+    const base = Number(match[1]);
+    if (!Number.isFinite(base))
+        return null;
+
+    const suffix = (match[2] ?? '').toUpperCase();
+    const multiplier = suffix === 'K' ? 1_000 :
+        suffix === 'M' ? 1_000_000 :
+        suffix === 'B' ? 1_000_000_000 : 1;
+
+    return Math.round(base * multiplier);
+}
+
+export function parseOpenCodeStats(text) {
+    const totals = new Map();
+    let currentModel = null;
+    let currentTokens = 0;
+
+    const flush = () => {
+        if (currentModel !== null && currentTokens > 0)
+            totals.set(currentModel, (totals.get(currentModel) ?? 0) + currentTokens);
+        currentModel = null;
+        currentTokens = 0;
+    };
+
+    for (const rawLine of text.split('\n')) {
+        const match = rawLine.match(/^│\s*(.*?)\s*│$/u);
+        if (!match)
+            continue;
+
+        const content = match[1].trim();
+        if (!content || /^[-─┼┬┴]+$/u.test(content))
+            continue;
+
+        if (/^[A-Za-z0-9._-]+\/[A-Za-z0-9._:-]+$/.test(content)) {
+            flush();
+            currentModel = content;
+            continue;
+        }
+
+        if (currentModel === null)
+            continue;
+
+        const metric = content.match(/^(Input Tokens|Output Tokens|Cache Read|Cache Write)\s+([0-9.]+[KMB]?)$/i);
+        if (!metric)
+            continue;
+
+        const value = parseCompactNumber(metric[2]);
+        if (value !== null)
+            currentTokens += value;
+    }
+
+    flush();
+    return totals;
+}
+
+export function mergeModelActivity(codex, openCodeTotals) {
+    const totals = new Map();
+
+    for (const row of codex.models)
+        totals.set(row.model, (totals.get(row.model) ?? 0) + row.tokens);
+
+    let openCodeTokens = 0;
+    for (const [qualifiedModel, tokens] of openCodeTotals) {
+        const slash = qualifiedModel.indexOf('/');
+        const provider = slash >= 0 ? qualifiedModel.slice(0, slash).toLowerCase() : '';
+        const model = slash >= 0 ? qualifiedModel.slice(slash + 1) : qualifiedModel;
+
+        if (provider && provider !== 'openai' && provider !== 'chatgpt')
+            continue;
+        if (tokens <= 0)
+            continue;
+
+        totals.set(model, (totals.get(model) ?? 0) + tokens);
+        openCodeTokens += tokens;
+    }
+
+    const totalTokens = [...totals.values()].reduce((sum, tokens) => sum + tokens, 0);
+    const models = [...totals.entries()]
+        .map(([model, tokens]) => ({
+            model,
+            tokens,
+            sharePercent: totalTokens > 0 ? tokens / totalTokens * 100 : 0,
+        }))
+        .sort((a, b) => b.tokens - a.tokens || a.model.localeCompare(b.model));
+
+    return {
+        models,
+        totalTokens,
+        scannedAtMs: codex.scannedAtMs,
+        windowDays: codex.windowDays,
+        sources: openCodeTokens > 0 ? ['Codex', 'OpenCode'] : codex.sources,
+    };
 }
 
 export function compactModelActivity(snapshot, maxRows = 4) {
