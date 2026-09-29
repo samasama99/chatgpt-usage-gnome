@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import {compactModelActivity, displayModelName, formatTokenCount, parseCodexRollout, summarizeModelActivity} from '../extension/activity-model.js';
+import {compactModelActivity, displayModelName, formatTokenCount, mergeModelActivity, parseCodexRollout, parseOpenCodeStats, summarizeModelActivity} from '../extension/activity-model.js';
 
 const line = (timestamp, type, payload) => JSON.stringify({timestamp, type, payload});
 
@@ -85,4 +85,51 @@ test('formats compact token counts and model names', () => {
     assert.equal(formatTokenCount(1_250_000), '1.3M');
     assert.equal(displayModelName('gpt-5.6-sol'), 'GPT-5.6 Sol');
     assert.equal(displayModelName('gpt-5.6-codex'), 'GPT-5.6 Codex');
+});
+
+
+test('parses OpenCode model statistics and token totals', () => {
+    const text = [
+        '┌────────────────────────────────────────────────────────┐',
+        '│                      MODEL USAGE                       │',
+        '├────────────────────────────────────────────────────────┤',
+        '│ openai/gpt-5.6-codex                                  │',
+        '│  Messages                                          120 │',
+        '│  Input Tokens                                     1.2M │',
+        '│  Output Tokens                                    320K │',
+        '│  Cache Read                                       800K │',
+        '│  Cache Write                                       20K │',
+        '│  Cost                                            $0.00 │',
+        '├────────────────────────────────────────────────────────┤',
+        '│ anthropic/claude-sonnet-4                           │',
+        '│  Input Tokens                                     500K │',
+        '│  Output Tokens                                    100K │',
+        '└────────────────────────────────────────────────────────┘',
+    ].join('\n');
+
+    const totals = parseOpenCodeStats(text);
+    assert.equal(totals.get('openai/gpt-5.6-codex'), 2_340_000);
+    assert.equal(totals.get('anthropic/claude-sonnet-4'), 600_000);
+});
+
+test('merges OpenCode OpenAI usage with Codex and ignores unrelated providers', () => {
+    const now = Date.parse('2026-09-29T12:00:00Z');
+    const codex = summarizeModelActivity([
+        {timestampMs: now - 1_000, model: 'gpt-5.6-codex', tokens: 600},
+        {timestampMs: now - 2_000, model: 'gpt-5.6-sol', tokens: 400},
+    ], now, 7);
+
+    const merged = mergeModelActivity(codex, new Map([
+        ['openai/gpt-5.6-codex', 400],
+        ['openai/gpt-5.5', 500],
+        ['anthropic/claude-sonnet-4', 5_000],
+    ]));
+
+    assert.equal(merged.totalTokens, 1_900);
+    assert.deepEqual(merged.sources, ['Codex', 'OpenCode']);
+    assert.deepEqual(merged.models.map(row => [row.model, row.tokens]), [
+        ['gpt-5.6-codex', 1_000],
+        ['gpt-5.5', 500],
+        ['gpt-5.6-sol', 400],
+    ]);
 });
