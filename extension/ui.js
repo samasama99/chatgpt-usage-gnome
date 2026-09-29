@@ -130,7 +130,7 @@ class ModelActivitySection {
             x_expand: true,
         });
         heading.add_child(new St.Label({
-            text: 'Codex model activity',
+            text: 'Local model activity',
             style_class: 'chatgpt-activity-title',
             x_expand: true,
         }));
@@ -155,7 +155,7 @@ class ModelActivitySection {
     showLoading() {
         this.clearRows();
         this.rows.add_child(new St.Label({
-            text: 'Reading local Codex activity…',
+            text: 'Reading local model activity…',
             style_class: 'chatgpt-activity-empty',
         }));
     }
@@ -170,12 +170,13 @@ class ModelActivitySection {
 
     update(snapshot) {
         this.clearRows();
-        this.subtitle.text = `Local · ${snapshot.windowDays} days · ${formatTokenCount(snapshot.totalTokens)} tokens`;
+        const sources = snapshot.sources.length > 0 ? snapshot.sources.join(' + ') : 'Local';
+        this.subtitle.text = `${sources} · ${snapshot.windowDays} days · ${formatTokenCount(snapshot.totalTokens)} tokens`;
 
         const rows = compactModelActivity(snapshot, 4);
         if (rows.length === 0) {
             this.rows.add_child(new St.Label({
-                text: 'No recent local Codex activity found',
+                text: 'No recent local model activity found',
                 style_class: 'chatgpt-activity-empty',
             }));
             return;
