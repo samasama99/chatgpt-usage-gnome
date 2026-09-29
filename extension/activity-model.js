@@ -192,7 +192,7 @@ export function mergeModelActivity(codex, openCodeTotals) {
         totalTokens,
         scannedAtMs: codex.scannedAtMs,
         windowDays: codex.windowDays,
-        sources: openCodeTokens > 0 ? [...codex.sources, 'OpenCode'] : codex.sources;
+        sources: openCodeTokens > 0 ? [...codex.sources, 'OpenCode'] : codex.sources,
     };
 }
 
