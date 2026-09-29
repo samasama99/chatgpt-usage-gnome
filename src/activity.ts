@@ -104,6 +104,7 @@ export class ModelActivityScanner {
     private readonly openCodePath = GLib.find_program_in_path('opencode');
     private inFlight: Promise<ModelActivitySnapshot> | null = null;
     private openCodeCache: {atMs: number; totals: ReadonlyMap<string, number>} | null = null;
+    private openCodeProcess: Gio.Subprocess | null = null;
 
     scan(windowDays = DEFAULT_WINDOW_DAYS): Promise<ModelActivitySnapshot> {
         if (this.inFlight !== null)
@@ -155,19 +156,21 @@ export class ModelActivityScanner {
     }
 
     private async readOpenCodeStats(windowDays: number, nowMs: number): Promise<ReadonlyMap<string, number>> {
-        if (!this.openCodePath)
+        const executable = this.openCodePath;
+        if (!executable)
             return new Map();
 
         // Avoid repeatedly starting OpenCode if the popup is opened several times in
-        // quick succession. Manual refresh still refreshes quota data immediately.
+        // quick succession.
         if (this.openCodeCache !== null && nowMs - this.openCodeCache.atMs < 60_000)
             return this.openCodeCache.totals;
 
         try {
             const process = Gio.Subprocess.new(
-                [this.openCodePath, 'stats', '--days', String(windowDays), '--models'],
+                [executable, 'stats', '--days', String(windowDays), '--models'],
                 Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE,
             );
+            this.openCodeProcess = process;
 
             const [, stdout] = await process.communicate_utf8_async(null, null);
             if (!process.get_successful() || typeof stdout !== 'string')
@@ -178,10 +181,14 @@ export class ModelActivityScanner {
             return totals;
         } catch {
             return new Map();
+        } finally {
+            this.openCodeProcess = null;
         }
     }
 
     clear(): void {
+        this.openCodeProcess?.force_exit();
+        this.openCodeProcess = null;
         this.cache.clear();
         this.openCodeCache = null;
     }
