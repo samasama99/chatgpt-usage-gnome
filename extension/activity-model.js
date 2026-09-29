@@ -94,7 +94,7 @@ export function summarizeModelActivity(records, nowMs = Date.now(), windowDays =
         }))
         .sort((a, b) => b.tokens - a.tokens || a.model.localeCompare(b.model));
 
-    return {models, totalTokens, scannedAtMs: nowMs, windowDays, sources: ['Codex']};
+    return {models, totalTokens, scannedAtMs: nowMs, windowDays, sources: totalTokens > 0 ? ['Codex'] : []};
 }
 
 function parseCompactNumber(value) {
@@ -192,7 +192,7 @@ export function mergeModelActivity(codex, openCodeTotals) {
         totalTokens,
         scannedAtMs: codex.scannedAtMs,
         windowDays: codex.windowDays,
-        sources: openCodeTokens > 0 ? ['Codex', 'OpenCode'] : codex.sources,
+        sources: openCodeTokens > 0 ? [...codex.sources, 'OpenCode'] : codex.sources;
     };
 }
 
