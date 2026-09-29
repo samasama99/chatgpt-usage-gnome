@@ -12,20 +12,22 @@ The extension:
 - refuses HTTP redirects for authenticated requests;
 - disables libsoup's authentication cache;
 - never writes, refreshes, copies, persists, or logs OAuth credentials;
-- runs no daemon, helper server, Node.js runtime, Python process, or Rust process;
+- runs no daemon or helper server; when OpenCode is installed, it may start `opencode stats` with a fixed argument vector while the popup is open;
 - sends no intentional analytics or telemetry.
 
 ## Local session metadata
 
 The optional model-activity section reads recent Codex rollout JSONL files under `$CODEX_HOME/sessions` or `~/.codex/sessions` only when the popup is opened.
 
-The parser extracts only:
+The Codex parser extracts only:
 
 - rollout timestamps;
 - turn IDs and model names from `turn_context` records;
 - response token totals from `token_usage_record` records.
 
-Prompt text, assistant responses, tool arguments/results, shell output, and workspace contents are ignored. The derived model totals remain in memory and are never transmitted.
+If `opencode` is available on the desktop session's PATH, the extension may also execute `opencode stats --days 7 --models` directly through `Gio.Subprocess`. It does not invoke a shell, pass user-controlled arguments, or expose ChatGPT credentials to that process. Only OpenAI/ChatGPT model names and aggregate token totals from stdout are merged into the local view.
+
+Prompt text, assistant responses, tool arguments/results, shell output, and workspace contents are not displayed or transmitted by the extension. Derived local totals remain in memory and are never sent to ChatGPT.
 
 ## Trust boundary
 
