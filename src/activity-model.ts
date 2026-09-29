@@ -156,7 +156,7 @@ export function parseOpenCodeStats(text: string): ReadonlyMap<string, number> {
         if (!match)
             continue;
 
-        const content = match[1].trim();
+        const content = (match[1] ?? '').trim();
         if (!content || /^[-─┼┬┴]+$/u.test(content))
             continue;
 
@@ -173,7 +173,7 @@ export function parseOpenCodeStats(text: string): ReadonlyMap<string, number> {
         if (!metric)
             continue;
 
-        const value = parseCompactNumber(metric[2]);
+        const value = parseCompactNumber(metric[2] ?? '');
         if (value !== null)
             currentTokens += value;
     }
