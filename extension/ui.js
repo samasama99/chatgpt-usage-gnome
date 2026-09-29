@@ -6,7 +6,7 @@ import St from 'gi://St';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {compactModelActivity, displayModelName, formatTokenCount} from './activity-model.js';
-import {formatAge, formatPanel, formatReset, progressFillWidth} from './model.js';
+import {formatAge, formatPanel, formatReset, progressScale} from './model.js';
 
 const VERTICAL_PROPS = 'orientation' in St.BoxLayout.prototype
     ? {orientation: Clutter.Orientation.VERTICAL}
@@ -18,39 +18,36 @@ const HORIZONTAL_PROPS = 'orientation' in St.BoxLayout.prototype
 class ProgressBar {
     actor;
     fill;
-    percent = 0;
 
     constructor() {
-        this.actor = new St.BoxLayout({
-            ...HORIZONTAL_PROPS,
+        this.fill = new St.Widget({
+            style_class: 'chatgpt-progress-fill',
+            x_expand: true,
+            x_align: Clutter.ActorAlign.FILL,
+            height: 5,
+        });
+        this.fill.set_pivot_point(0, 0.5);
+
+        this.actor = new St.Bin({
             style_class: 'chatgpt-progress-track',
             x_expand: true,
             x_align: Clutter.ActorAlign.FILL,
             height: 5,
         });
-        this.fill = new St.Widget({
-            style_class: 'chatgpt-progress-fill',
-            height: 5,
-        });
-        this.actor.add_child(this.fill);
-        this.actor.connect('notify::width', () => this.syncWidth());
+        this.actor.set_child(this.fill);
         this.update(0);
     }
 
     update(remainingPercent) {
-        this.percent = Math.max(0, Math.min(100, remainingPercent));
-        this.syncWidth();
+        const percent = Math.max(0, Math.min(100, remainingPercent));
+        this.fill.scale_x = progressScale(percent);
 
-        if (this.percent <= 10)
+        if (percent <= 10)
             this.fill.set_style_class_name('chatgpt-progress-fill chatgpt-progress-critical');
-        else if (this.percent <= 25)
+        else if (percent <= 25)
             this.fill.set_style_class_name('chatgpt-progress-fill chatgpt-progress-warning');
         else
             this.fill.set_style_class_name('chatgpt-progress-fill');
-    }
-
-    syncWidth() {
-        this.fill.width = progressFillWidth(this.actor.width, this.percent);
     }
 }
 
@@ -345,7 +342,30 @@ export class UsageIndicator {
         this.footerLabel = new St.Label({
             text: 'Not updated yet',
             style_class: 'chatgpt-footer',
+            x_expand: true,
+            y_align: Clutter.ActorAlign.CENTER,
         });
+
+        const footer = new St.BoxLayout({
+            ...HORIZONTAL_PROPS,
+            style_class: 'chatgpt-footer-row',
+            x_expand: true,
+        });
+        footer.add_child(this.footerLabel);
+
+        const refreshButton = new St.Button({
+            label: 'Refresh',
+            style_class: 'chatgpt-refresh-button',
+            can_focus: true,
+            reactive: true,
+            track_hover: true,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        refreshButton.connect('clicked', () => {
+            this.onRefresh();
+            this.refreshActivity();
+        });
+        footer.add_child(refreshButton);
 
         content.add_child(header);
         content.add_child(this.fiveHourRow.actor);
@@ -357,15 +377,10 @@ export class UsageIndicator {
         }));
         content.add_child(this.activitySection.actor);
         content.add_child(this.errorLabel);
-        content.add_child(this.footerLabel);
+        content.add_child(footer);
         contentItem.add_child(content);
 
         this.button.menu.addMenuItem(contentItem);
-        this.button.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-
-        const refreshItem = new PopupMenu.PopupMenuItem('Refresh usage');
-        refreshItem.connect('activate', () => this.onRefresh());
-        this.button.menu.addMenuItem(refreshItem);
 
         this.openStateSignalId = this.button.menu.connect(
             'open-state-changed',
