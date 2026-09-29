@@ -16,6 +16,7 @@ die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 
 command -v gnome-shell >/dev/null 2>&1 || die 'gnome-shell was not found.'
 command -v gnome-extensions >/dev/null 2>&1 || die 'gnome-extensions was not found.'
+command -v glib-compile-schemas >/dev/null 2>&1 || die 'glib-compile-schemas was not found.'
 
 shell_version="$(gnome-shell --version 2>/dev/null || true)"
 major="$(printf '%s' "$shell_version" | sed -nE 's/.* ([0-9]+)(\.[0-9]+)*/\1/p')"
@@ -65,6 +66,10 @@ rm -rf -- "$DEST"
 mkdir -p -- "$DEST"
 cp -a -- "$SOURCE/." "$DEST/"
 
+if [[ -d "$DEST/schemas" ]]; then
+    glib-compile-schemas "$DEST/schemas"
+fi
+
 auth_file=''
 if [[ -n "${CODEX_HOME:-}" && -f "$CODEX_HOME/auth.json" ]]; then
     auth_file="$CODEX_HOME/auth.json"
@@ -85,3 +90,6 @@ else
     say 'GNOME has not loaded this extension yet. Log out and back in once, then run:'
     say "  gnome-extensions enable $UUID"
 fi
+
+say 'Preferences:'
+say "  gnome-extensions prefs $UUID"
