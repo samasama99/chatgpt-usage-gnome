@@ -239,6 +239,8 @@ function displayPlan(plan) {
 export class UsageIndicator {
     button;
     serviceIcon;
+    panelBox;
+    panelIcon;
     panelLabel;
     fiveHourRow;
     weeklyRow;
@@ -248,40 +250,46 @@ export class UsageIndicator {
     onOpen;
     onRefresh;
     onLoadActivity;
+    onOpenPreferences;
     activitySection;
+    activityDivider;
     state = null;
     popupTickId = 0;
     openStateSignalId = 0;
     activityRequestId = 0;
     destroyed = false;
+    preferences;
 
-    constructor(iconPath, onOpen, onRefresh, onLoadActivity) {
+    constructor(iconPath, preferences, onOpen, onRefresh, onLoadActivity, onOpenPreferences) {
         this.onOpen = onOpen;
         this.onRefresh = onRefresh;
         this.onLoadActivity = onLoadActivity;
+        this.onOpenPreferences = onOpenPreferences;
+        this.preferences = preferences;
         this.serviceIcon = new Gio.FileIcon({
             file: Gio.File.new_for_path(iconPath),
         });
 
         this.button = new PanelMenu.Button(0.0, 'ChatGPT Usage');
 
-        const panelBox = new St.BoxLayout({
+        this.panelBox = new St.BoxLayout({
             ...HORIZONTAL_PROPS,
             style_class: 'chatgpt-panel',
             y_align: Clutter.ActorAlign.CENTER,
         });
-        panelBox.add_child(new St.Icon({
+        this.panelIcon = new St.Icon({
             gicon: this.serviceIcon,
             style_class: 'system-status-icon chatgpt-panel-icon',
             icon_size: 16,
-        }));
+        });
+        this.panelBox.add_child(this.panelIcon);
         this.panelLabel = new St.Label({
             text: '5h -- · W --',
             style_class: 'chatgpt-panel-label',
             y_align: Clutter.ActorAlign.CENTER,
         });
-        panelBox.add_child(this.panelLabel);
-        this.button.add_child(panelBox);
+        this.panelBox.add_child(this.panelLabel);
+        this.button.add_child(this.panelBox);
 
         const contentItem = new PopupMenu.PopupBaseMenuItem({
             reactive: false,
@@ -354,6 +362,17 @@ export class UsageIndicator {
         });
         footer.add_child(this.footerLabel);
 
+        const settingsButton = new St.Button({
+            label: 'Settings',
+            style_class: 'chatgpt-refresh-button',
+            can_focus: true,
+            reactive: true,
+            track_hover: true,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        settingsButton.connect('clicked', () => this.onOpenPreferences());
+        footer.add_child(settingsButton);
+
         const refreshButton = new St.Button({
             label: 'Refresh',
             style_class: 'chatgpt-refresh-button',
@@ -364,18 +383,20 @@ export class UsageIndicator {
         });
         refreshButton.connect('clicked', () => {
             this.onRefresh();
-            this.refreshActivity();
+            if (this.preferences.showLocalActivity)
+                this.refreshActivity();
         });
         footer.add_child(refreshButton);
 
         content.add_child(header);
         content.add_child(this.fiveHourRow.actor);
         content.add_child(this.weeklyRow.actor);
-        content.add_child(new St.Widget({
+        this.activityDivider = new St.Widget({
             style_class: 'chatgpt-section-divider',
             height: 1,
             x_expand: true,
-        }));
+        });
+        content.add_child(this.activityDivider);
         content.add_child(this.activitySection.actor);
         content.add_child(this.errorLabel);
         content.add_child(footer);
@@ -388,7 +409,8 @@ export class UsageIndicator {
             (_menu, open) => {
                 if (open) {
                     this.onOpen();
-                    this.refreshActivity();
+                    if (this.preferences.showLocalActivity)
+                        this.refreshActivity();
                     this.startPopupTick();
                     this.render();
                 } else {
@@ -396,6 +418,27 @@ export class UsageIndicator {
                 }
             },
         );
+
+        this.applyPreferences(preferences);
+    }
+
+    applyPreferences(preferences) {
+        this.preferences = preferences;
+        this.panelIcon.visible = preferences.showPanelIcon;
+        this.activitySection.actor.visible = preferences.showLocalActivity;
+        this.activityDivider.visible = preferences.showLocalActivity;
+
+        if (!preferences.showLocalActivity)
+            this.activityRequestId += 1;
+
+        if (preferences.panelBackgroundEnabled) {
+            this.panelBox.set_style(
+                `background-color: ${preferences.panelBackgroundColor}; ` +
+                'border-radius: 8px; padding: 2px 7px;',
+            );
+        } else {
+            this.panelBox.set_style(null);
+        }
     }
 
     update(state) {
