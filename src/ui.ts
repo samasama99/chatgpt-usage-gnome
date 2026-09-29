@@ -17,6 +17,7 @@ import {
 import type {FetchFailure} from './api.js';
 import {formatAge, formatPanel, formatReset, progressScale, type UsageSnapshot, type UsageWindow} from './model.js';
 import type {PollerState} from './poller.js';
+import type {IndicatorPreferences} from './settings-model.js';
 
 const VERTICAL_PROPS = 'orientation' in St.BoxLayout.prototype
     ? {orientation: Clutter.Orientation.VERTICAL}
@@ -29,6 +30,7 @@ const HORIZONTAL_PROPS = 'orientation' in St.BoxLayout.prototype
 type OpenListener = () => void;
 type RefreshListener = () => void;
 type ActivityLoader = () => Promise<ModelActivitySnapshot>;
+type PreferencesListener = () => void;
 
 class ProgressBar {
     readonly actor: St.Bin;
@@ -259,6 +261,8 @@ export class UsageIndicator {
     readonly button: PanelMenu.Button;
 
     private readonly serviceIcon: Gio.Icon;
+    private readonly panelBox: St.BoxLayout;
+    private readonly panelIcon: St.Icon;
     private readonly panelLabel: St.Label;
     private readonly fiveHourRow: UsageRow;
     private readonly weeklyRow: UsageRow;
@@ -268,41 +272,54 @@ export class UsageIndicator {
     private readonly onOpen: OpenListener;
     private readonly onRefresh: RefreshListener;
     private readonly onLoadActivity: ActivityLoader;
+    private readonly onOpenPreferences: PreferencesListener;
     private readonly activitySection: ModelActivitySection;
+    private readonly activityDivider: St.Widget;
 
     private state: PollerState | null = null;
     private popupTickId = 0;
     private openStateSignalId = 0;
     private activityRequestId = 0;
     private destroyed = false;
+    private preferences: IndicatorPreferences;
 
-    constructor(iconPath: string, onOpen: OpenListener, onRefresh: RefreshListener, onLoadActivity: ActivityLoader) {
+    constructor(
+        iconPath: string,
+        preferences: IndicatorPreferences,
+        onOpen: OpenListener,
+        onRefresh: RefreshListener,
+        onLoadActivity: ActivityLoader,
+        onOpenPreferences: PreferencesListener,
+    ) {
         this.onOpen = onOpen;
         this.onRefresh = onRefresh;
         this.onLoadActivity = onLoadActivity;
+        this.onOpenPreferences = onOpenPreferences;
+        this.preferences = preferences;
         this.serviceIcon = new Gio.FileIcon({
             file: Gio.File.new_for_path(iconPath),
         });
 
         this.button = new PanelMenu.Button(0.0, 'ChatGPT Usage');
 
-        const panelBox = new St.BoxLayout({
+        this.panelBox = new St.BoxLayout({
             ...HORIZONTAL_PROPS,
             style_class: 'chatgpt-panel',
             y_align: Clutter.ActorAlign.CENTER,
         } as never);
-        panelBox.add_child(new St.Icon({
+        this.panelIcon = new St.Icon({
             gicon: this.serviceIcon,
             style_class: 'system-status-icon chatgpt-panel-icon',
             icon_size: 16,
-        }));
+        });
+        this.panelBox.add_child(this.panelIcon);
         this.panelLabel = new St.Label({
             text: '5h -- · W --',
             style_class: 'chatgpt-panel-label',
             y_align: Clutter.ActorAlign.CENTER,
         });
-        panelBox.add_child(this.panelLabel);
-        this.button.add_child(panelBox);
+        this.panelBox.add_child(this.panelLabel);
+        this.button.add_child(this.panelBox);
 
         const contentItem = new PopupMenu.PopupBaseMenuItem({
             reactive: false,
@@ -375,6 +392,17 @@ export class UsageIndicator {
         } as never);
         footer.add_child(this.footerLabel);
 
+        const settingsButton = new St.Button({
+            label: 'Settings',
+            style_class: 'chatgpt-refresh-button',
+            can_focus: true,
+            reactive: true,
+            track_hover: true,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        settingsButton.connect('clicked', () => this.onOpenPreferences());
+        footer.add_child(settingsButton);
+
         const refreshButton = new St.Button({
             label: 'Refresh',
             style_class: 'chatgpt-refresh-button',
@@ -385,18 +413,20 @@ export class UsageIndicator {
         });
         refreshButton.connect('clicked', () => {
             this.onRefresh();
-            this.refreshActivity();
+            if (this.preferences.showLocalActivity)
+                this.refreshActivity();
         });
         footer.add_child(refreshButton);
 
         content.add_child(header);
         content.add_child(this.fiveHourRow.actor);
         content.add_child(this.weeklyRow.actor);
-        content.add_child(new St.Widget({
+        this.activityDivider = new St.Widget({
             style_class: 'chatgpt-section-divider',
             height: 1,
             x_expand: true,
-        }));
+        });
+        content.add_child(this.activityDivider);
         content.add_child(this.activitySection.actor);
         content.add_child(this.errorLabel);
         content.add_child(footer);
@@ -409,7 +439,8 @@ export class UsageIndicator {
             (_menu: unknown, open: boolean) => {
                 if (open) {
                     this.onOpen();
-                    this.refreshActivity();
+                    if (this.preferences.showLocalActivity)
+                        this.refreshActivity();
                     this.startPopupTick();
                     this.render();
                 } else {
@@ -417,6 +448,27 @@ export class UsageIndicator {
                 }
             },
         );
+
+        this.applyPreferences(preferences);
+    }
+
+    applyPreferences(preferences: IndicatorPreferences): void {
+        this.preferences = preferences;
+        this.panelIcon.visible = preferences.showPanelIcon;
+        this.activitySection.actor.visible = preferences.showLocalActivity;
+        this.activityDivider.visible = preferences.showLocalActivity;
+
+        if (!preferences.showLocalActivity)
+            this.activityRequestId += 1;
+
+        if (preferences.panelBackgroundEnabled) {
+            this.panelBox.set_style(
+                `background-color: ${preferences.panelBackgroundColor}; ` +
+                'border-radius: 8px; padding: 2px 7px;',
+            );
+        } else {
+            this.panelBox.set_style(null);
+        }
     }
 
     update(state: PollerState): void {
