@@ -13,3 +13,12 @@ export function normalizePanelColor(value) {
         ? trimmed.toLowerCase()
         : DEFAULT_PANEL_BACKGROUND_COLOR;
 }
+
+export function workspaceRelativeInsertionIndex(activityIndex, rtl, position) {
+    if (position === 'center')
+        return 0;
+
+    const visualAfter = position === 'right';
+    const logicalAfter = rtl ? !visualAfter : visualAfter;
+    return Math.max(0, activityIndex + (logicalAfter ? 1 : 0));
+}
