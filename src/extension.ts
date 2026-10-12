@@ -48,8 +48,9 @@ export default class ChatGPTUsageExtension extends Extension {
             this.uuid,
             this.indicator.button,
             0,
-            preferences.panelPosition,
+            preferences.panelPosition === 'center' ? 'center' : 'left',
         );
+        this.moveIndicator(preferences.panelPosition);
 
         this.settingsSignalId = this.settings.connect(
             'changed',
@@ -120,10 +121,14 @@ export default class ChatGPTUsageExtension extends Extension {
         if (indicator === null)
             return;
 
+        type PanelBox = {
+            get_n_children(): number;
+            insert_child_at_index(actor: unknown, index: number): void;
+        };
+
         const panel = Main.panel as unknown as {
-            _leftBox: {insert_child_at_index(actor: unknown, index: number): void};
-            _centerBox: {insert_child_at_index(actor: unknown, index: number): void};
-            _rightBox: {insert_child_at_index(actor: unknown, index: number): void};
+            _leftBox: PanelBox;
+            _centerBox: PanelBox;
         };
         const button = indicator.button as unknown as {
             container: {
@@ -132,16 +137,21 @@ export default class ChatGPTUsageExtension extends Extension {
         };
 
         const container = button.container;
-        const parent = container.get_parent();
-        parent?.remove_child(container);
+        container.get_parent()?.remove_child(container);
 
-        const target = position === 'left'
-            ? panel._leftBox
-            : position === 'center'
-                ? panel._centerBox
-                : panel._rightBox;
+        if (position === 'center') {
+            panel._centerBox.insert_child_at_index(container, 0);
+            return;
+        }
 
-        target.insert_child_at_index(container, 0);
+        // "Left" and "Right" are visual positions around the normal workspace /
+        // activities area.  On Fedora's panel the workspace indicator lives in the
+        // left box, so putting "Right" in GNOME's right box was surprising.
+        const index = position === 'left'
+            ? 0
+            : panel._leftBox.get_n_children();
+
+        panel._leftBox.insert_child_at_index(container, index);
     }
 
     private subscribeToResume(): void {
