@@ -302,6 +302,7 @@ export class UsageIndicator {
             ...VERTICAL_PROPS,
             style_class: 'chatgpt-popup',
             x_expand: true,
+            width: 350,
         });
 
         const header = new St.BoxLayout({
@@ -464,7 +465,7 @@ export class UsageIndicator {
         this.errorLabel.visible = message.length > 0;
 
         const age = formatAge(this.state.lastSuccessMs, nowMs);
-        this.footerLabel.text = this.state.updating ? `Updating…  ·  ${age}` : age;
+        this.footerLabel.text = this.state.updating ? 'Updating…' : age;
     }
 
     refreshActivity() {
