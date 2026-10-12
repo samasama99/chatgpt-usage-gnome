@@ -42,8 +42,9 @@ export default class ChatGPTUsageExtension extends Extension {
             this.uuid,
             this.indicator.button,
             0,
-            preferences.panelPosition,
+            preferences.panelPosition === 'center' ? 'center' : 'left',
         );
+        this.moveIndicator(preferences.panelPosition);
 
         this.settingsSignalId = this.settings.connect(
             'changed',
@@ -116,16 +117,18 @@ export default class ChatGPTUsageExtension extends Extension {
 
         const panel = Main.panel;
         const container = indicator.button.container;
-        const parent = container.get_parent();
-        parent?.remove_child(container);
+        container.get_parent()?.remove_child(container);
 
-        const target = position === 'left'
-            ? panel._leftBox
-            : position === 'center'
-                ? panel._centerBox
-                : panel._rightBox;
+        if (position === 'center') {
+            panel._centerBox.insert_child_at_index(container, 0);
+            return;
+        }
 
-        target.insert_child_at_index(container, 0);
+        const index = position === 'left'
+            ? 0
+            : panel._leftBox.get_n_children();
+
+        panel._leftBox.insert_child_at_index(container, index);
     }
 
     subscribeToResume() {
