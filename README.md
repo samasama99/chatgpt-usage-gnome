@@ -30,7 +30,7 @@ gnome-extensions prefs chatgpt-usage@samasama99
 Available options:
 
 - **Show ChatGPT icon** — hide the panel icon and keep only the usage text.
-- **Panel position** — move the indicator to the left, center, or right GNOME panel box.
+- **Panel position** — `Left` places it before the workspace controls, `Right` places it after them, and `Center` moves it to the middle of the panel.
 - **Panel background** — enable a rounded colored background behind the indicator and choose a `#RRGGBB` color.
 - **Show local coding activity** — hide the local Codex/OpenCode section and completely skip local session scanning / OpenCode stats while disabled.
 
