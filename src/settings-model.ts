@@ -24,3 +24,16 @@ export function normalizePanelColor(value: string): string {
         ? trimmed.toLowerCase()
         : DEFAULT_PANEL_BACKGROUND_COLOR;
 }
+
+export function workspaceRelativeInsertionIndex(
+    activityIndex: number,
+    rtl: boolean,
+    position: PanelPosition,
+): number {
+    if (position === 'center')
+        return 0;
+
+    const visualAfter = position === 'right';
+    const logicalAfter = rtl ? !visualAfter : visualAfter;
+    return Math.max(0, activityIndex + (logicalAfter ? 1 : 0));
+}
