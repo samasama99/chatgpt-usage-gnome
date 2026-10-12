@@ -38,7 +38,7 @@ export default class ChatGPTUsagePreferences extends ExtensionPreferences {
         const positionModel = Gtk.StringList.new(POSITION_LABELS);
         const position = new Adw.ComboRow({
             title: 'Panel position',
-            subtitle: 'Move the indicator between the left, center, and right panel boxes.',
+            subtitle: 'Left = before workspace controls, Right = after them, Center = middle of the panel.',
             model: positionModel,
         });
         const currentPosition = settings.get_string('panel-position');
