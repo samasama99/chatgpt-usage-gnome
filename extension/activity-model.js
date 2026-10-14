@@ -106,11 +106,17 @@ export function parseCodexRollout(text) {
         if (typeof turnId !== 'string' || !turnId || !isRecord(usage) || timestampMs === null)
             continue;
 
-        const totalTokens = finiteNumber(usage.total_tokens);
-        if (totalTokens === null || totalTokens <= 0)
+        const breakdown = {
+            inputTokens: nonNegativeInt(usage.input_tokens),
+            cachedInputTokens: nonNegativeInt(usage.cached_input_tokens),
+            cacheWriteInputTokens: nonNegativeInt(usage.cache_write_input_tokens),
+            outputTokens: nonNegativeInt(usage.output_tokens),
+            totalTokens: nonNegativeInt(usage.total_tokens),
+        };
+        if (breakdown.totalTokens <= 0)
             continue;
 
-        pending.push({timestampMs, turnId, tokens: Math.trunc(totalTokens)});
+        pending.push({timestampMs, turnId, usage: breakdown});
     }
 
     return pending.flatMap(record => {
