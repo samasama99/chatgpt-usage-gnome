@@ -13,7 +13,7 @@ const USAGE_URL = 'https://chatgpt.com/backend-api/wham/usage';
 const RESET_CREDITS_URL = 'https://chatgpt.com/backend-api/wham/rate-limit-reset-credits';
 const SUBSCRIPTION_URL = 'https://chatgpt.com/backend-api/subscriptions';
 const SUBSCRIPTION_CACHE_MS = 6 * 60 * 60 * 1000;
-const USER_AGENT = 'chatgpt-usage-gnome/0.6.1';
+const USER_AGENT = 'chatgpt-usage-gnome/0.7.0';
 
 export type FetchErrorKind = 'auth' | 'rate-limit' | 'network' | 'server' | 'invalid-response';
 
