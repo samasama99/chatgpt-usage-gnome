@@ -19,9 +19,9 @@
     "pack:extension": "npm run build && (cd extension && zip -qr ../chatgpt-usage@samasama99.shell-extension.zip .)"
   },
   "devDependencies": {
-    "@girs/gjs": "5.0.0",
+    "@girs/gjs": "5.4.0",
     "@girs/gnome-shell": "50.0.4",
-    "@girs/soup-3.0": "4.7.0",
+    "@girs/soup-3.0": "5.4.0",
     "typescript": "7.0.2"
   }
 }
