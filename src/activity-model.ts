@@ -87,6 +87,28 @@ function addBreakdown(a: TokenBreakdown, b: TokenBreakdown): TokenBreakdown {
     };
 }
 
+function normalizeBreakdown(value: Partial<TokenBreakdown> & {readonly tokens?: number}): TokenBreakdown {
+    const totalTokens = Math.max(0, Math.trunc(value.totalTokens ?? value.tokens ?? 0));
+    const cachedInputTokens = Math.max(0, Math.trunc(value.cachedInputTokens ?? 0));
+    const cacheWriteInputTokens = Math.max(0, Math.trunc(value.cacheWriteInputTokens ?? 0));
+    const outputTokens = Math.max(0, Math.trunc(value.outputTokens ?? 0));
+    const uncachedInputTokens = Math.max(
+        0,
+        Math.trunc(
+            value.uncachedInputTokens ??
+            (totalTokens - cachedInputTokens - cacheWriteInputTokens - outputTokens),
+        ),
+    );
+
+    return {
+        uncachedInputTokens,
+        cachedInputTokens,
+        cacheWriteInputTokens,
+        outputTokens,
+        totalTokens,
+    };
+}
+
 function lineItem(value: unknown): Record<string, unknown> | null {
     if (!isRecord(value))
         return null;
@@ -237,7 +259,10 @@ export function summarizeModelActivity(
             continue;
         totals.set(
             record.model,
-            addBreakdown(totals.get(record.model) ?? emptyBreakdown(), record),
+            addBreakdown(
+                totals.get(record.model) ?? emptyBreakdown(),
+                normalizeBreakdown(record),
+            ),
         );
     }
 
@@ -364,7 +389,7 @@ export function mergeModelActivity(
     const totals = new Map<string, TokenBreakdown>();
 
     for (const row of codex.models)
-        totals.set(row.model, row);
+        totals.set(row.model, normalizeBreakdown(row));
 
     let openCodeTokens = 0;
     for (const [qualifiedModel, usage] of openCodeTotals) {
@@ -408,7 +433,7 @@ export function compactModelActivity(
     const visible = snapshot.models.slice(0, maxRows - 1);
     const rest = snapshot.models.slice(maxRows - 1);
     const aggregate = rest.reduce(
-        (sum, row) => addBreakdown(sum, row),
+        (sum, row) => addBreakdown(sum, normalizeBreakdown(row)),
         emptyBreakdown(),
     );
     const costKnown = rest.every(row => row.apiEquivalentUsd !== null);
