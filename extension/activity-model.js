@@ -121,7 +121,12 @@ export function parseCodexRollout(text) {
 
     return pending.flatMap(record => {
         const model = turnModels.get(record.turnId);
-        return model ? [{timestampMs: record.timestampMs, model, tokens: record.tokens}] : [];
+        return model ? [{
+            timestampMs: record.timestampMs,
+            model,
+            tokens: record.usage.totalTokens,
+            ...record.usage,
+        }] : [];
     });
 }
 
