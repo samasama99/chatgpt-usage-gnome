@@ -152,7 +152,21 @@ export function summarizeModelActivity(records, nowMs = Date.now(), windowDays =
         }))
         .sort((a, b) => b.tokens - a.tokens || a.model.localeCompare(b.model));
 
-    return {models, totalTokens, scannedAtMs: nowMs, windowDays, sources: totalTokens > 0 ? ['Codex'] : []};
+    const estimatedApiCostUsd = models.reduce(
+        (sum, row) => sum + (row.estimatedApiCostUsd ?? 0), 0);
+    const pricedTokens = models.reduce(
+        (sum, row) => sum + (row.estimatedApiCostUsd === null ? 0 : row.tokens), 0);
+
+    return {
+        models,
+        totalTokens,
+        scannedAtMs: nowMs,
+        windowDays,
+        sources: totalTokens > 0 ? ['Codex'] : [],
+        estimatedApiCostUsd,
+        pricedTokens,
+        pricingCoveragePercent: totalTokens > 0 ? pricedTokens / totalTokens * 100 : 0,
+    };
 }
 
 function parseCompactNumber(value) {
