@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import {detectedConsumption, formatPanel, parseUsageResponse, progressScale} from '../extension/model.js';
+import {detectedConsumption, formatPanel, parseResetCreditsResponse, parseSubscriptionResponse, parseUsageResponse, progressScale} from '../extension/model.js';
 
 test('parses primary and secondary windows', () => {
     const snapshot = parseUsageResponse({
@@ -96,4 +96,25 @@ test('parses available reset credits when the backend exposes them', () => {
     });
 
     assert.equal(snapshot.resetCreditsAvailable, 3);
+});
+
+
+test('parses reset-credit detail responses', () => {
+    assert.equal(parseResetCreditsResponse({available_count: 2}), 2);
+    assert.equal(parseResetCreditsResponse({availableCount: 4}), 4);
+    assert.equal(parseResetCreditsResponse({}), null);
+});
+
+test('parses subscription renewal metadata when available', () => {
+    const renewal = parseSubscriptionResponse({
+        active_until: '2026-11-14T09:30:00Z',
+        will_renew: true,
+    });
+
+    assert.deepEqual(renewal, {
+        activeUntilMs: Date.parse('2026-11-14T09:30:00Z'),
+        willRenew: true,
+    });
+
+    assert.equal(parseSubscriptionResponse({will_renew: true}), null);
 });
