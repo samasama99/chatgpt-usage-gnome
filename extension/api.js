@@ -4,6 +4,7 @@ import { parseResetCreditsResponse, parseSubscriptionResponse, parseUsageRespons
 const USAGE_URL = 'https://chatgpt.com/backend-api/wham/usage';
 const RESET_CREDITS_URL = 'https://chatgpt.com/backend-api/wham/rate-limit-reset-credits';
 const SUBSCRIPTION_URL = 'https://chatgpt.com/backend-api/subscriptions';
+const SUBSCRIPTION_CACHE_MS = 6 * 60 * 60 * 1000;
 const USER_AGENT = 'chatgpt-usage-gnome/0.1';
 function parseRetryAfter(value) {
     if (value === null)
@@ -21,6 +22,7 @@ function failure(kind, message, retryAfterSeconds = null) {
 }
 export class UsageApi {
     http = new HttpClient();
+    subscriptionCache = null;
     async fetch() {
         let credentials;
         try {
@@ -71,7 +73,9 @@ export class UsageApi {
         }
 
         const [resetCreditsAvailable, subscription] = await Promise.all([
-            this.fetchResetCredits(headers),
+            usage.resetCreditsAvailable === null
+                ? this.fetchResetCredits(headers)
+                : Promise.resolve(usage.resetCreditsAvailable),
             this.fetchSubscription(credentials.accessToken, credentials.accountId),
         ]);
 
@@ -101,6 +105,12 @@ export class UsageApi {
         if (accountId === null)
             return null;
 
+        const nowMs = Date.now();
+        if (this.subscriptionCache?.accountId === accountId &&
+            nowMs - this.subscriptionCache.fetchedAtMs < SUBSCRIPTION_CACHE_MS) {
+            return this.subscriptionCache.info;
+        }
+
         const headers = {
             Authorization: `Bearer ${accessToken}`,
             Accept: 'application/json',
@@ -115,7 +125,10 @@ export class UsageApi {
             const response = await this.http.request('GET', url, headers, true);
             if (response.status < 200 || response.status >= 300)
                 return null;
-            return parseSubscriptionResponse(JSON.parse(response.text));
+            const info = parseSubscriptionResponse(JSON.parse(response.text));
+            if (info !== null)
+                this.subscriptionCache = {accountId, fetchedAtMs: nowMs, info};
+            return info;
         }
         catch {
             return null;
