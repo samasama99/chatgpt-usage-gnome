@@ -137,10 +137,11 @@ export function summarizeModelActivity(records, nowMs = Date.now(), windowDays =
     for (const record of records) {
         if (record.timestampMs < cutoffMs || record.timestampMs > nowMs + 60_000)
             continue;
-        totals.set(record.model, (totals.get(record.model) ?? 0) + record.tokens);
+        const usage = normalizedBreakdown(record);
+        totals.set(record.model, addBreakdown(totals.get(record.model) ?? emptyBreakdown(), usage));
     }
 
-    const totalTokens = [...totals.values()].reduce((sum, value) => sum + value, 0);
+    const totalTokens = [...totals.values()].reduce((sum, value) => sum + value.totalTokens, 0);
     const models = [...totals.entries()]
         .map(([model, tokens]) => ({
             model,
