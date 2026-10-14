@@ -104,7 +104,21 @@ export function parseUsageResponse(value, fetchedAtMs = Date.now()) {
 
     const planValue = value.plan_type ?? value.plan;
     const plan = typeof planValue === 'string' && planValue.trim() ? planValue.trim() : null;
-    return {fiveHour, weekly, plan, fetchedAtMs};
+
+    const resetCreditsValue = value.rate_limit_reset_credits;
+    const resetCreditsAvailable = isRecord(resetCreditsValue)
+        ? finiteNumber(resetCreditsValue.available_count)
+        : null;
+
+    return {
+        fiveHour,
+        weekly,
+        plan,
+        resetCreditsAvailable: resetCreditsAvailable === null
+            ? null
+            : Math.max(0, Math.trunc(resetCreditsAvailable)),
+        fetchedAtMs,
+    };
 }
 function windowShowsConsumption(previous, next) {
     return previous !== null && next !== null &&
