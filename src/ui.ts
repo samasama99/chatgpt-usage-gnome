@@ -267,6 +267,7 @@ export class UsageIndicator {
     private readonly fiveHourRow: UsageRow;
     private readonly weeklyRow: UsageRow;
     private readonly planLabel: St.Label;
+    private readonly resetCreditsLabel: St.Label;
     private readonly errorLabel: St.Label;
     private readonly footerLabel: St.Label;
     private readonly onOpen: OpenListener;
@@ -366,6 +367,12 @@ export class UsageIndicator {
             style_class: 'chatgpt-plan',
         });
         heading.add_child(this.planLabel);
+
+        this.resetCreditsLabel = new St.Label({
+            text: '',
+            style_class: 'chatgpt-plan',
+        });
+        heading.add_child(this.resetCreditsLabel);
         header.add_child(heading);
 
         this.fiveHourRow = new UsageRow('5-hour');
@@ -487,6 +494,11 @@ export class UsageIndicator {
         this.panelLabel.text = formatPanel(snapshot);
         this.planLabel.text = displayPlan(snapshot?.plan ?? null);
         this.planLabel.visible = this.planLabel.text.length > 0;
+        const resetCredits = snapshot?.resetCreditsAvailable ?? null;
+        this.resetCreditsLabel.text = resetCredits === null
+            ? ''
+            : `Reset credits available: ${resetCredits}`;
+        this.resetCreditsLabel.visible = resetCredits !== null;
         this.fiveHourRow.update(snapshot?.fiveHour ?? null, nowMs);
         this.weeklyRow.update(snapshot?.weekly ?? null, nowMs);
 
