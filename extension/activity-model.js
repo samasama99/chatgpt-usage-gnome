@@ -143,10 +143,12 @@ export function summarizeModelActivity(records, nowMs = Date.now(), windowDays =
 
     const totalTokens = [...totals.values()].reduce((sum, value) => sum + value.totalTokens, 0);
     const models = [...totals.entries()]
-        .map(([model, tokens]) => ({
+        .map(([model, usage]) => ({
             model,
-            tokens,
-            sharePercent: totalTokens > 0 ? tokens / totalTokens * 100 : 0,
+            tokens: usage.totalTokens,
+            ...usage,
+            sharePercent: totalTokens > 0 ? usage.totalTokens / totalTokens * 100 : 0,
+            estimatedApiCostUsd: estimateApiEquivalentCost(model, usage),
         }))
         .sort((a, b) => b.tokens - a.tokens || a.model.localeCompare(b.model));
 
