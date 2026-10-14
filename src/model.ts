@@ -12,6 +12,8 @@ export interface UsageSnapshot {
     readonly weekly: UsageWindow | null;
     readonly plan: string | null;
     readonly resetCreditsAvailable: number | null;
+    readonly subscriptionActiveUntilMs: number | null;
+    readonly willRenew: boolean | null;
     readonly fetchedAtMs: number;
 }
 
@@ -149,6 +151,8 @@ export function parseUsageResponse(value: unknown, fetchedAtMs = Date.now()): Us
         resetCreditsAvailable: resetCreditsAvailable === null
             ? null
             : Math.max(0, Math.trunc(resetCreditsAvailable)),
+        subscriptionActiveUntilMs: null,
+        willRenew: null,
         fetchedAtMs,
     };
 }
