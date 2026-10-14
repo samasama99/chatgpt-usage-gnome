@@ -12,14 +12,7 @@ export interface UsageSnapshot {
     readonly weekly: UsageWindow | null;
     readonly plan: string | null;
     readonly resetCreditsAvailable: number | null;
-    readonly subscriptionActiveUntilMs: number | null;
-    readonly willRenew: boolean | null;
     readonly fetchedAtMs: number;
-}
-
-export interface SubscriptionInfo {
-    readonly activeUntilMs: number;
-    readonly willRenew: boolean | null;
 }
 
 interface ParsedWindow extends UsageWindow {
@@ -143,23 +136,7 @@ export function parseUsageResponse(value: unknown, fetchedAtMs = Date.now()): Us
 
     const planValue = value.plan_type ?? value.plan;
     const plan = typeof planValue === 'string' && planValue.trim() ? planValue.trim() : null;
-
-    const resetCreditsValue = value.rate_limit_reset_credits;
-    const resetCreditsAvailable = isRecord(resetCreditsValue)
-        ? finiteNumber(resetCreditsValue.available_count)
-        : null;
-
-    return {
-        fiveHour,
-        weekly,
-        plan,
-        resetCreditsAvailable: resetCreditsAvailable === null
-            ? null
-            : Math.max(0, Math.trunc(resetCreditsAvailable)),
-        subscriptionActiveUntilMs: null,
-        willRenew: null,
-        fetchedAtMs,
-    };
+    return {fiveHour, weekly, plan, fetchedAtMs};
 }
 
 function windowShowsConsumption(previous: UsageWindow | null, next: UsageWindow | null): boolean {
@@ -230,28 +207,4 @@ export function formatAge(timestampMs: number | null, nowMs = Date.now()): strin
         return `Updated ${minutes}m ago`;
 
     return `Updated ${Math.floor(minutes / 60)}h ago`;
-}
-
-
-export function parseSubscriptionInfo(value: unknown): SubscriptionInfo | null {
-    if (!isRecord(value))
-        return null;
-
-    const candidate = isRecord(value.data) ? value.data : value;
-    const activeUntil = candidate.active_until ?? candidate.activeUntil;
-
-    let activeUntilMs = Number.NaN;
-    if (typeof activeUntil === 'string')
-        activeUntilMs = Date.parse(activeUntil);
-    else if (typeof activeUntil === 'number' && Number.isFinite(activeUntil))
-        activeUntilMs = activeUntil > 10_000_000_000 ? activeUntil : activeUntil * 1000;
-
-    if (!Number.isFinite(activeUntilMs))
-        return null;
-
-    const renewValue = candidate.will_renew ?? candidate.willRenew;
-    return {
-        activeUntilMs: Math.trunc(activeUntilMs),
-        willRenew: typeof renewValue === 'boolean' ? renewValue : null,
-    };
 }

@@ -9,7 +9,7 @@ export class HttpClient {
         this.session = new Soup.Session({ timeout: 10 });
         this.cancellable = new Gio.Cancellable();
     }
-    request(method, url, headers, forceHttp1 = false) {
+    request(method, url, headers) {
         if (this.disposed)
             return Promise.reject(new Error('HTTP client is disposed.'));
         const message = Soup.Message.new(method, url);
@@ -17,8 +17,6 @@ export class HttpClient {
             return Promise.reject(new Error('Invalid usage endpoint URL.'));
         message.add_flags(Soup.MessageFlags.NO_REDIRECT);
         message.add_flags(Soup.MessageFlags.DO_NOT_USE_AUTH_CACHE);
-        if (forceHttp1)
-            message.set_force_http1(true);
         for (const [name, value] of Object.entries(headers))
             message.request_headers.replace(name, value);
         return new Promise((resolve, reject) => {

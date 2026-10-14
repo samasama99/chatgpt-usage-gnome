@@ -1,15 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 const DAY_MS = 24 * 60 * 60 * 1000;
-const API_PRICES = new Map([
-    ['gpt-6-astra', {input: 10, cachedInput: 1, cacheWrite: 12.5, output: 50}],
-    ['gpt-6.1-sol', {input: 2, cachedInput: 0.1, cacheWrite: 2.5, output: 10}],
-    ['gpt-6-sol', {input: 2, cachedInput: 0.2, cacheWrite: 2.5, output: 10}],
-    ['gpt-6-luna', {input: 0.1, cachedInput: 0.01, cacheWrite: 0.125, output: 0.5}],
-    ['gpt-5.6-sol', {input: 4, cachedInput: 0.4, cacheWrite: 5, output: 20}],
-    ['gpt-5.6-terra', {input: 2, cachedInput: 0.2, cacheWrite: 2.5, output: 12}],
-    ['gpt-5.6-luna', {input: 0.2, cachedInput: 0.02, cacheWrite: 0.25, output: 1.2}],
-    ['gpt-5.3-codex', {input: 1.75, cachedInput: 0.175, cacheWrite: 1.75, output: 14}],
-]);
 
 function isRecord(value) {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -17,40 +7,6 @@ function isRecord(value) {
 
 function finiteNumber(value) {
     return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-function nonNegativeInt(value) {
-    const parsed = finiteNumber(value);
-    return parsed === null ? 0 : Math.max(0, Math.trunc(parsed));
-}
-function emptyBreakdown() {
-    return {inputTokens: 0, cachedInputTokens: 0, cacheWriteInputTokens: 0, outputTokens: 0, totalTokens: 0};
-}
-function addBreakdown(a, b) {
-    return {
-        inputTokens: a.inputTokens + b.inputTokens,
-        cachedInputTokens: a.cachedInputTokens + b.cachedInputTokens,
-        cacheWriteInputTokens: a.cacheWriteInputTokens + b.cacheWriteInputTokens,
-        outputTokens: a.outputTokens + b.outputTokens,
-        totalTokens: a.totalTokens + b.totalTokens,
-    };
-}
-function normalizedBreakdown(value) {
-    const totalTokens = Math.max(0, Math.trunc(value.totalTokens ?? value.tokens ?? 0));
-    return {
-        inputTokens: Math.max(0, Math.trunc(value.inputTokens ?? totalTokens)),
-        cachedInputTokens: Math.max(0, Math.trunc(value.cachedInputTokens ?? 0)),
-        cacheWriteInputTokens: Math.max(0, Math.trunc(value.cacheWriteInputTokens ?? 0)),
-        outputTokens: Math.max(0, Math.trunc(value.outputTokens ?? 0)),
-        totalTokens,
-    };
-}
-export function estimateApiEquivalentCost(model, usage) {
-    const price = API_PRICES.get(model.toLowerCase());
-    if (!price)
-        return null;
-    const uncachedInput = Math.max(0, usage.inputTokens - usage.cachedInputTokens);
-    return (uncachedInput * price.input + usage.cachedInputTokens * price.cachedInput +
-        usage.cacheWriteInputTokens * price.cacheWrite + usage.outputTokens * price.output) / 1_000_000;
 }
 
 function lineItem(value) {
@@ -106,27 +62,16 @@ export function parseCodexRollout(text) {
         if (typeof turnId !== 'string' || !turnId || !isRecord(usage) || timestampMs === null)
             continue;
 
-        const breakdown = {
-            inputTokens: nonNegativeInt(usage.input_tokens),
-            cachedInputTokens: nonNegativeInt(usage.cached_input_tokens),
-            cacheWriteInputTokens: nonNegativeInt(usage.cache_write_input_tokens),
-            outputTokens: nonNegativeInt(usage.output_tokens),
-            totalTokens: nonNegativeInt(usage.total_tokens),
-        };
-        if (breakdown.totalTokens <= 0)
+        const totalTokens = finiteNumber(usage.total_tokens);
+        if (totalTokens === null || totalTokens <= 0)
             continue;
 
-        pending.push({timestampMs, turnId, usage: breakdown});
+        pending.push({timestampMs, turnId, tokens: Math.trunc(totalTokens)});
     }
 
     return pending.flatMap(record => {
         const model = turnModels.get(record.turnId);
-        return model ? [{
-            timestampMs: record.timestampMs,
-            model,
-            tokens: record.usage.totalTokens,
-            ...record.usage,
-        }] : [];
+        return model ? [{timestampMs: record.timestampMs, model, tokens: record.tokens}] : [];
     });
 }
 
@@ -137,36 +82,19 @@ export function summarizeModelActivity(records, nowMs = Date.now(), windowDays =
     for (const record of records) {
         if (record.timestampMs < cutoffMs || record.timestampMs > nowMs + 60_000)
             continue;
-        const usage = normalizedBreakdown(record);
-        totals.set(record.model, addBreakdown(totals.get(record.model) ?? emptyBreakdown(), usage));
+        totals.set(record.model, (totals.get(record.model) ?? 0) + record.tokens);
     }
 
-    const totalTokens = [...totals.values()].reduce((sum, value) => sum + value.totalTokens, 0);
+    const totalTokens = [...totals.values()].reduce((sum, value) => sum + value, 0);
     const models = [...totals.entries()]
-        .map(([model, usage]) => ({
+        .map(([model, tokens]) => ({
             model,
-            tokens: usage.totalTokens,
-            ...usage,
-            sharePercent: totalTokens > 0 ? usage.totalTokens / totalTokens * 100 : 0,
-            estimatedApiCostUsd: estimateApiEquivalentCost(model, usage),
+            tokens,
+            sharePercent: totalTokens > 0 ? tokens / totalTokens * 100 : 0,
         }))
         .sort((a, b) => b.tokens - a.tokens || a.model.localeCompare(b.model));
 
-    const estimatedApiCostUsd = models.reduce(
-        (sum, row) => sum + (row.estimatedApiCostUsd ?? 0), 0);
-    const pricedTokens = models.reduce(
-        (sum, row) => sum + (row.estimatedApiCostUsd === null ? 0 : row.tokens), 0);
-
-    return {
-        models,
-        totalTokens,
-        scannedAtMs: nowMs,
-        windowDays,
-        sources: totalTokens > 0 ? ['Codex'] : [],
-        estimatedApiCostUsd,
-        pricedTokens,
-        pricingCoveragePercent: totalTokens > 0 ? pricedTokens / totalTokens * 100 : 0,
-    };
+    return {models, totalTokens, scannedAtMs: nowMs, windowDays, sources: totalTokens > 0 ? ['Codex'] : []};
 }
 
 function parseCompactNumber(value) {
@@ -233,41 +161,31 @@ export function mergeModelActivity(codex, openCodeTotals) {
     const totals = new Map();
 
     for (const row of codex.models)
-        totals.set(row.model, normalizedBreakdown(row));
+        totals.set(row.model, (totals.get(row.model) ?? 0) + row.tokens);
 
     let openCodeTokens = 0;
-    for (const [qualifiedModel, tokenCount] of openCodeTotals) {
+    for (const [qualifiedModel, tokens] of openCodeTotals) {
         const slash = qualifiedModel.indexOf('/');
         const provider = slash >= 0 ? qualifiedModel.slice(0, slash).toLowerCase() : '';
         const model = slash >= 0 ? qualifiedModel.slice(slash + 1) : qualifiedModel;
 
         if (provider && provider !== 'openai' && provider !== 'chatgpt')
             continue;
-
-        const usage = normalizedBreakdown({tokens: tokenCount});
-        if (usage.totalTokens <= 0)
+        if (tokens <= 0)
             continue;
 
-        totals.set(model, addBreakdown(totals.get(model) ?? emptyBreakdown(), usage));
-        openCodeTokens += usage.totalTokens;
+        totals.set(model, (totals.get(model) ?? 0) + tokens);
+        openCodeTokens += tokens;
     }
 
-    const totalTokens = [...totals.values()].reduce(
-        (sum, usage) => sum + usage.totalTokens, 0);
+    const totalTokens = [...totals.values()].reduce((sum, tokens) => sum + tokens, 0);
     const models = [...totals.entries()]
-        .map(([model, usage]) => ({
+        .map(([model, tokens]) => ({
             model,
-            tokens: usage.totalTokens,
-            ...usage,
-            sharePercent: totalTokens > 0 ? usage.totalTokens / totalTokens * 100 : 0,
-            estimatedApiCostUsd: estimateApiEquivalentCost(model, usage),
+            tokens,
+            sharePercent: totalTokens > 0 ? tokens / totalTokens * 100 : 0,
         }))
         .sort((a, b) => b.tokens - a.tokens || a.model.localeCompare(b.model));
-
-    const estimatedApiCostUsd = models.reduce(
-        (sum, row) => sum + (row.estimatedApiCostUsd ?? 0), 0);
-    const pricedTokens = models.reduce(
-        (sum, row) => sum + (row.estimatedApiCostUsd === null ? 0 : row.tokens), 0);
 
     return {
         models,
@@ -275,9 +193,6 @@ export function mergeModelActivity(codex, openCodeTotals) {
         scannedAtMs: codex.scannedAtMs,
         windowDays: codex.windowDays,
         sources: openCodeTokens > 0 ? [...codex.sources, 'OpenCode'] : codex.sources,
-        estimatedApiCostUsd,
-        pricedTokens,
-        pricingCoveragePercent: totalTokens > 0 ? pricedTokens / totalTokens * 100 : 0,
     };
 }
 

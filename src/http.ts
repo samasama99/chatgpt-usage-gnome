@@ -20,7 +20,7 @@ export class HttpClient {
         this.cancellable = new Gio.Cancellable();
     }
 
-    request(method: string, url: string, headers: Readonly<Record<string, string>>, forceHttp1 = false): Promise<HttpResponse> {
+    request(method: string, url: string, headers: Readonly<Record<string, string>>): Promise<HttpResponse> {
         if (this.disposed)
             return Promise.reject(new Error('HTTP client is disposed.'));
 
@@ -30,8 +30,6 @@ export class HttpClient {
 
         message.add_flags(Soup.MessageFlags.NO_REDIRECT);
         message.add_flags(Soup.MessageFlags.DO_NOT_USE_AUTH_CACHE);
-        if (forceHttp1)
-            message.set_force_http1(true);
 
         for (const [name, value] of Object.entries(headers))
             message.request_headers.replace(name, value);

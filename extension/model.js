@@ -117,8 +117,6 @@ export function parseUsageResponse(value, fetchedAtMs = Date.now()) {
         resetCreditsAvailable: resetCreditsAvailable === null
             ? null
             : Math.max(0, Math.trunc(resetCreditsAvailable)),
-        subscriptionActiveUntilMs: null,
-        willRenew: null,
         fetchedAtMs,
     };
 }
