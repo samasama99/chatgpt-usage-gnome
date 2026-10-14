@@ -19,7 +19,12 @@ test('maps token usage records to the model for their turn', () => {
         }),
     ].join('\n');
 
-    assert.deepEqual(parseCodexRollout(text), [
+    const records = parseCodexRollout(text);
+    assert.deepEqual(records.map(record => ({
+        timestampMs: record.timestampMs,
+        model: record.model,
+        tokens: record.tokens,
+    })), [
         {timestampMs: Date.parse('2026-09-28T10:00:02Z'), model: 'gpt-5.6-sol', tokens: 120},
         {timestampMs: Date.parse('2026-09-28T10:01:02Z'), model: 'gpt-5.6-codex', tokens: 80},
     ]);
@@ -71,12 +76,16 @@ test('compacts long model lists into Other', () => {
         ],
     };
 
-    assert.deepEqual(compactModelActivity(snapshot, 4), [
-        {model: 'a', tokens: 400, sharePercent: 40},
-        {model: 'b', tokens: 250, sharePercent: 25},
-        {model: 'c', tokens: 150, sharePercent: 15},
-        {model: 'Other', tokens: 200, sharePercent: 20},
-    ]);
+    assert.deepEqual(
+        compactModelActivity(snapshot, 4)
+            .map(row => ({model: row.model, tokens: row.tokens, sharePercent: row.sharePercent})),
+        [
+            {model: 'a', tokens: 400, sharePercent: 40},
+            {model: 'b', tokens: 250, sharePercent: 25},
+            {model: 'c', tokens: 150, sharePercent: 15},
+            {model: 'Other', tokens: 200, sharePercent: 20},
+        ],
+    );
 });
 
 test('formats compact token counts and model names', () => {
