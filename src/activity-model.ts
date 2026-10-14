@@ -399,7 +399,7 @@ export function compactModelActivity(
     const visible = snapshot.models.slice(0, maxRows - 1);
     const rest = snapshot.models.slice(maxRows - 1);
     const aggregate = rest.reduce(
-        (sum, row) => addBreakdown(sum, row),
+        (sum, row) => addBreakdown(sum, normalizedBreakdown(row)),
         emptyBreakdown(),
     );
     const otherCost = rest.every(row => row.estimatedApiCostUsd !== null)
