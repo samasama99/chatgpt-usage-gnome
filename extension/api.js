@@ -1,7 +1,9 @@
 import { AuthError, loadCodexCredentials } from './auth.js';
 import { HttpClient } from './http.js';
-import { parseUsageResponse } from './model.js';
+import { parseResetCreditsResponse, parseSubscriptionResponse, parseUsageResponse } from './model.js';
 const USAGE_URL = 'https://chatgpt.com/backend-api/wham/usage';
+const RESET_CREDITS_URL = 'https://chatgpt.com/backend-api/wham/rate-limit-reset-credits';
+const SUBSCRIPTION_URL = 'https://chatgpt.com/backend-api/subscriptions';
 const USER_AGENT = 'chatgpt-usage-gnome/0.1';
 function parseRetryAfter(value) {
     if (value === null)
@@ -60,13 +62,66 @@ export class UsageApi {
         catch {
             return failure('invalid-response', 'Usage service returned invalid JSON.');
         }
+        let usage;
         try {
-            return { ok: true, usage: parseUsageResponse(json) };
+            usage = parseUsageResponse(json);
         }
         catch {
             return failure('invalid-response', 'Usage response format is not recognized.');
         }
+
+        const [resetCreditsAvailable, subscription] = await Promise.all([
+            this.fetchResetCredits(headers),
+            this.fetchSubscription(credentials.accessToken, credentials.accountId),
+        ]);
+
+        return {
+            ok: true,
+            usage: {
+                ...usage,
+                resetCreditsAvailable: resetCreditsAvailable ?? usage.resetCreditsAvailable,
+                planActiveUntilMs: subscription?.activeUntilMs ?? null,
+                willRenew: subscription?.willRenew ?? null,
+            },
+        };
     }
+    async fetchResetCredits(headers) {
+        try {
+            const response = await this.http.request('GET', RESET_CREDITS_URL, headers);
+            if (response.status < 200 || response.status >= 300)
+                return null;
+            return parseResetCreditsResponse(JSON.parse(response.text));
+        }
+        catch {
+            return null;
+        }
+    }
+
+    async fetchSubscription(accessToken, accountId) {
+        if (accountId === null)
+            return null;
+
+        const headers = {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: 'application/json',
+            'ChatGPT-Account-Id': accountId,
+            'OpenAI-Beta': 'codex-1',
+            Originator: 'Codex Desktop',
+            'User-Agent': USER_AGENT,
+        };
+
+        try {
+            const url = `${SUBSCRIPTION_URL}?account_id=${encodeURIComponent(accountId)}`;
+            const response = await this.http.request('GET', url, headers, true);
+            if (response.status < 200 || response.status >= 300)
+                return null;
+            return parseSubscriptionResponse(JSON.parse(response.text));
+        }
+        catch {
+            return null;
+        }
+    }
+
     dispose() {
         this.http.dispose();
     }
