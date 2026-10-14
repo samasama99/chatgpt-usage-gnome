@@ -245,6 +245,7 @@ export class UsageIndicator {
     fiveHourRow;
     weeklyRow;
     planLabel;
+    resetCreditsLabel;
     errorLabel;
     footerLabel;
     onOpen;
@@ -336,6 +337,11 @@ export class UsageIndicator {
             style_class: 'chatgpt-plan',
         });
         heading.add_child(this.planLabel);
+        this.resetCreditsLabel = new St.Label({
+            text: '',
+            style_class: 'chatgpt-plan',
+        });
+        heading.add_child(this.resetCreditsLabel);
         header.add_child(heading);
 
         this.fiveHourRow = new UsageRow('5-hour');
