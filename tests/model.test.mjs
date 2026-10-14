@@ -83,3 +83,17 @@ test('progress scale clamps cleanly at percentage boundaries', () => {
     assert.equal(progressScale(120), 1);
     assert.equal(progressScale(Number.NaN), 0);
 });
+
+
+test('parses available reset credits when the backend exposes them', () => {
+    const snapshot = parseUsageResponse({
+        rate_limit: {
+            primary_window: {used_percent: 20, limit_window_seconds: 18_000},
+        },
+        rate_limit_reset_credits: {
+            available_count: 3,
+        },
+    });
+
+    assert.equal(snapshot.resetCreditsAvailable, 3);
+});
