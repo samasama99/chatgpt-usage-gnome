@@ -11,6 +11,7 @@ export interface UsageSnapshot {
     readonly fiveHour: UsageWindow | null;
     readonly weekly: UsageWindow | null;
     readonly plan: string | null;
+    readonly resetCreditsAvailable: number | null;
     readonly fetchedAtMs: number;
 }
 
