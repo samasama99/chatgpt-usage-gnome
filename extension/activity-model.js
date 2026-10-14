@@ -236,28 +236,38 @@ export function mergeModelActivity(codex, openCodeTotals) {
         totals.set(row.model, normalizedBreakdown(row));
 
     let openCodeTokens = 0;
-    for (const [qualifiedModel, tokens] of openCodeTotals) {
+    for (const [qualifiedModel, tokenCount] of openCodeTotals) {
         const slash = qualifiedModel.indexOf('/');
         const provider = slash >= 0 ? qualifiedModel.slice(0, slash).toLowerCase() : '';
         const model = slash >= 0 ? qualifiedModel.slice(slash + 1) : qualifiedModel;
 
         if (provider && provider !== 'openai' && provider !== 'chatgpt')
             continue;
-        if (tokens <= 0)
+
+        const usage = normalizedBreakdown({tokens: tokenCount});
+        if (usage.totalTokens <= 0)
             continue;
 
-        totals.set(model, (totals.get(model) ?? 0) + tokens);
-        openCodeTokens += tokens;
+        totals.set(model, addBreakdown(totals.get(model) ?? emptyBreakdown(), usage));
+        openCodeTokens += usage.totalTokens;
     }
 
-    const totalTokens = [...totals.values()].reduce((sum, tokens) => sum + tokens, 0);
+    const totalTokens = [...totals.values()].reduce(
+        (sum, usage) => sum + usage.totalTokens, 0);
     const models = [...totals.entries()]
-        .map(([model, tokens]) => ({
+        .map(([model, usage]) => ({
             model,
-            tokens,
-            sharePercent: totalTokens > 0 ? tokens / totalTokens * 100 : 0,
+            tokens: usage.totalTokens,
+            ...usage,
+            sharePercent: totalTokens > 0 ? usage.totalTokens / totalTokens * 100 : 0,
+            estimatedApiCostUsd: estimateApiEquivalentCost(model, usage),
         }))
         .sort((a, b) => b.tokens - a.tokens || a.model.localeCompare(b.model));
+
+    const estimatedApiCostUsd = models.reduce(
+        (sum, row) => sum + (row.estimatedApiCostUsd ?? 0), 0);
+    const pricedTokens = models.reduce(
+        (sum, row) => sum + (row.estimatedApiCostUsd === null ? 0 : row.tokens), 0);
 
     return {
         models,
@@ -265,6 +275,9 @@ export function mergeModelActivity(codex, openCodeTotals) {
         scannedAtMs: codex.scannedAtMs,
         windowDays: codex.windowDays,
         sources: openCodeTokens > 0 ? [...codex.sources, 'OpenCode'] : codex.sources,
+        estimatedApiCostUsd,
+        pricedTokens,
+        pricingCoveragePercent: totalTokens > 0 ? pricedTokens / totalTokens * 100 : 0,
     };
 }
 
