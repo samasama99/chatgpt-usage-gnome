@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import {compactModelActivity, displayModelName, formatTokenCount, mergeModelActivity, parseCodexRollout, parseOpenCodeStats, summarizeModelActivity} from '../extension/activity-model.js';
+import {compactModelActivity, displayModelName, estimateApiEquivalentCost, formatTokenCount, formatUsd, mergeModelActivity, parseCodexRollout, parseOpenCodeStats, summarizeModelActivity} from '../extension/activity-model.js';
 
 const line = (timestamp, type, payload) => JSON.stringify({timestamp, type, payload});
 
@@ -141,4 +141,25 @@ test('merges OpenCode OpenAI usage with Codex and ignores unrelated providers', 
         ['gpt-5.5', 500],
         ['gpt-5.6-sol', 400],
     ]);
+});
+
+
+test('estimates API-equivalent cost from token categories', () => {
+    const cost = estimateApiEquivalentCost('gpt-6.1-sol', {
+        uncachedInputTokens: 500_000,
+        cachedInputTokens: 500_000,
+        cacheWriteInputTokens: 100_000,
+        outputTokens: 200_000,
+        totalTokens: 1_300_000,
+    });
+
+    assert.equal(cost, 3.3);
+    assert.equal(formatUsd(cost), '$3.30');
+    assert.equal(estimateApiEquivalentCost('unknown-model', {
+        uncachedInputTokens: 100,
+        cachedInputTokens: 0,
+        cacheWriteInputTokens: 0,
+        outputTokens: 10,
+        totalTokens: 110,
+    }), null);
 });
