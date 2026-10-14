@@ -6,9 +6,10 @@ import GLib from 'gi://GLib';
 import {
     mergeModelActivity,
     parseCodexRollout,
-    parseOpenCodeStats,
+    parseOpenCodeUsageStats,
     summarizeModelActivity,
     type ModelActivitySnapshot,
+    type TokenBreakdown,
     type TokenRecord,
 } from './activity-model.js';
 
@@ -103,7 +104,7 @@ export class ModelActivityScanner {
     private readonly cache = new Map<string, CachedFile>();
     private readonly openCodePath = GLib.find_program_in_path('opencode');
     private inFlight: Promise<ModelActivitySnapshot> | null = null;
-    private openCodeCache: {atMs: number; totals: ReadonlyMap<string, number>} | null = null;
+    private openCodeCache: {atMs: number; totals: ReadonlyMap<string, TokenBreakdown>} | null = null;
     private openCodeProcess: Gio.Subprocess | null = null;
 
     scan(windowDays = DEFAULT_WINDOW_DAYS): Promise<ModelActivitySnapshot> {
@@ -155,7 +156,7 @@ export class ModelActivityScanner {
         return mergeModelActivity(codex, openCodeTotals);
     }
 
-    private async readOpenCodeStats(windowDays: number, nowMs: number): Promise<ReadonlyMap<string, number>> {
+    private async readOpenCodeStats(windowDays: number, nowMs: number): Promise<ReadonlyMap<string, TokenBreakdown>> {
         const executable = this.openCodePath;
         if (!executable)
             return new Map();
@@ -176,7 +177,7 @@ export class ModelActivityScanner {
             if (!process.get_successful() || typeof stdout !== 'string')
                 return new Map();
 
-            const totals = parseOpenCodeStats(stdout);
+            const totals = parseOpenCodeUsageStats(stdout);
             this.openCodeCache = {atMs: nowMs, totals};
             return totals;
         } catch {
