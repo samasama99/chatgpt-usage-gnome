@@ -1,5 +1,15 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 const DAY_MS = 24 * 60 * 60 * 1000;
+const API_PRICES = new Map([
+    ['gpt-6-astra', {input: 10, cachedInput: 1, cacheWrite: 12.5, output: 50}],
+    ['gpt-6.1-sol', {input: 2, cachedInput: 0.1, cacheWrite: 2.5, output: 10}],
+    ['gpt-6-sol', {input: 2, cachedInput: 0.2, cacheWrite: 2.5, output: 10}],
+    ['gpt-6-luna', {input: 0.1, cachedInput: 0.01, cacheWrite: 0.125, output: 0.5}],
+    ['gpt-5.6-sol', {input: 4, cachedInput: 0.4, cacheWrite: 5, output: 20}],
+    ['gpt-5.6-terra', {input: 2, cachedInput: 0.2, cacheWrite: 2.5, output: 12}],
+    ['gpt-5.6-luna', {input: 0.2, cachedInput: 0.02, cacheWrite: 0.25, output: 1.2}],
+    ['gpt-5.3-codex', {input: 1.75, cachedInput: 0.175, cacheWrite: 1.75, output: 14}],
+]);
 
 function isRecord(value) {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -7,6 +17,40 @@ function isRecord(value) {
 
 function finiteNumber(value) {
     return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+function nonNegativeInt(value) {
+    const parsed = finiteNumber(value);
+    return parsed === null ? 0 : Math.max(0, Math.trunc(parsed));
+}
+function emptyBreakdown() {
+    return {inputTokens: 0, cachedInputTokens: 0, cacheWriteInputTokens: 0, outputTokens: 0, totalTokens: 0};
+}
+function addBreakdown(a, b) {
+    return {
+        inputTokens: a.inputTokens + b.inputTokens,
+        cachedInputTokens: a.cachedInputTokens + b.cachedInputTokens,
+        cacheWriteInputTokens: a.cacheWriteInputTokens + b.cacheWriteInputTokens,
+        outputTokens: a.outputTokens + b.outputTokens,
+        totalTokens: a.totalTokens + b.totalTokens,
+    };
+}
+function normalizedBreakdown(value) {
+    const totalTokens = Math.max(0, Math.trunc(value.totalTokens ?? value.tokens ?? 0));
+    return {
+        inputTokens: Math.max(0, Math.trunc(value.inputTokens ?? totalTokens)),
+        cachedInputTokens: Math.max(0, Math.trunc(value.cachedInputTokens ?? 0)),
+        cacheWriteInputTokens: Math.max(0, Math.trunc(value.cacheWriteInputTokens ?? 0)),
+        outputTokens: Math.max(0, Math.trunc(value.outputTokens ?? 0)),
+        totalTokens,
+    };
+}
+export function estimateApiEquivalentCost(model, usage) {
+    const price = API_PRICES.get(model.toLowerCase());
+    if (!price)
+        return null;
+    const uncachedInput = Math.max(0, usage.inputTokens - usage.cachedInputTokens);
+    return (uncachedInput * price.input + usage.cachedInputTokens * price.cachedInput +
+        usage.cacheWriteInputTokens * price.cacheWrite + usage.outputTokens * price.output) / 1_000_000;
 }
 
 function lineItem(value) {
