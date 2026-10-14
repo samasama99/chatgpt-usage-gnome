@@ -17,6 +17,11 @@ export interface UsageSnapshot {
     readonly fetchedAtMs: number;
 }
 
+export interface SubscriptionInfo {
+    readonly activeUntilMs: number;
+    readonly willRenew: boolean | null;
+}
+
 interface ParsedWindow extends UsageWindow {
     readonly sourceKey: string;
 }
@@ -225,4 +230,28 @@ export function formatAge(timestampMs: number | null, nowMs = Date.now()): strin
         return `Updated ${minutes}m ago`;
 
     return `Updated ${Math.floor(minutes / 60)}h ago`;
+}
+
+
+export function parseSubscriptionInfo(value: unknown): SubscriptionInfo | null {
+    if (!isRecord(value))
+        return null;
+
+    const candidate = isRecord(value.data) ? value.data : value;
+    const activeUntil = candidate.active_until ?? candidate.activeUntil;
+
+    let activeUntilMs = Number.NaN;
+    if (typeof activeUntil === 'string')
+        activeUntilMs = Date.parse(activeUntil);
+    else if (typeof activeUntil === 'number' && Number.isFinite(activeUntil))
+        activeUntilMs = activeUntil > 10_000_000_000 ? activeUntil : activeUntil * 1000;
+
+    if (!Number.isFinite(activeUntilMs))
+        return null;
+
+    const renewValue = candidate.will_renew ?? candidate.willRenew;
+    return {
+        activeUntilMs: Math.trunc(activeUntilMs),
+        willRenew: typeof renewValue === 'boolean' ? renewValue : null,
+    };
 }
