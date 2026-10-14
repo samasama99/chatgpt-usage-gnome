@@ -2,7 +2,7 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
-import {mergeModelActivity, parseCodexRollout, parseOpenCodeStats, summarizeModelActivity} from './activity-model.js';
+import {mergeModelActivity, parseCodexRollout, parseOpenCodeStatsDetailed, summarizeModelActivity} from './activity-model.js';
 
 Gio._promisify(Gio.File.prototype, 'load_contents_async', 'load_contents_finish');
 Gio._promisify(Gio.Subprocess.prototype, 'communicate_utf8_async', 'communicate_utf8_finish');
@@ -160,7 +160,7 @@ export class ModelActivityScanner {
             if (!process.get_successful() || typeof stdout !== 'string')
                 return new Map();
 
-            const totals = parseOpenCodeStats(stdout);
+            const totals = parseOpenCodeStatsDetailed(stdout);
             this.openCodeCache = {atMs: nowMs, totals};
             return totals;
         } catch {

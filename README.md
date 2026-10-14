@@ -8,7 +8,7 @@ An internal GNOME Shell extension for showing ChatGPT/Codex subscription usage i
 [ChatGPT icon]  5h 82% · W 97%
 ```
 
-Click the indicator to see the 5-hour and weekly windows, progress bars, reset countdowns, update state, and manual refresh.
+Click the indicator to see the 5-hour and weekly windows, progress bars, reset countdowns, available reset credits, subscription renewal metadata when available, local coding activity, API-equivalent cost estimates, update state, and manual refresh.
 
 ## What it does
 
@@ -59,7 +59,17 @@ OpenCode support uses the public `opencode stats --days 7 --models` command with
 
 This section is intentionally labeled local. It is not an attribution of your ChatGPT subscription quota and it does not include ChatGPT web/mobile activity or activity from other computers.
 
-For Codex, only timestamps, turn IDs, model names, and token totals are extracted. Prompts, responses, tool contents, and file contents are not displayed or sent anywhere. No activity database or persistent cache is created.
+For Codex, only timestamps, turn IDs, model names, and token counts are extracted. Prompts, responses, tool contents, and file contents are not displayed or sent anywhere. No activity database or persistent cache is created.
+
+The popup also estimates what the locally observed OpenAI-model token activity would cost at current **standard API token prices**. The estimate uses input/cached-input/cache-write/output token categories when those are available. It deliberately excludes tool-call fees, Fast/Ultrafast/Batch/Flex multipliers, regional premiums, and long-context premiums. Models without a matching public API price are left unpriced and the UI shows partial pricing coverage rather than inventing a rate.
+
+## Reset credits and billing date
+
+The normal usage response is used for the available reset-credit count when it exposes one. If it does not, the extension makes a best-effort read of the same internal reset-credit endpoint used by Codex surfaces. This is read-only; the extension does not redeem or consume resets.
+
+The extension also makes a best-effort read of ChatGPT subscription metadata to show **Next billing** when the backend provides an active-until date and explicitly says the subscription will renew. If renewal is disabled it shows **Plan active until** instead. If reliable subscription metadata is unavailable, no billing date is shown.
+
+Subscription metadata is cached for six hours so the normal 8–60 second quota polling never turns into repeated billing requests.
 
 ## Install
 
@@ -87,13 +97,7 @@ TypeScript is development-only. The runtime is plain readable GJS JavaScript plu
 
 ## Security
 
-The authenticated request is fixed to:
-
-```text
-GET https://chatgpt.com/backend-api/wham/usage
-```
-
-Authenticated HTTP redirects are refused. Tokens are never logged or persisted by the extension.
+Authenticated requests are restricted to fixed `chatgpt.com` endpoints for usage, reset-credit metadata, and subscription metadata. They are read-only. Authenticated HTTP redirects are refused, and tokens are never logged or persisted by the extension.
 
 See [SECURITY.md](SECURITY.md) for the threat model.
 

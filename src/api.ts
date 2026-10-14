@@ -2,10 +2,18 @@
 
 import {AuthError, loadCodexCredentials} from './auth.js';
 import {HttpClient} from './http.js';
-import {parseUsageResponse, type UsageSnapshot} from './model.js';
+import {
+    parseResetCreditsResponse,
+    parseSubscriptionResponse,
+    parseUsageResponse,
+    type UsageSnapshot,
+} from './model.js';
 
 const USAGE_URL = 'https://chatgpt.com/backend-api/wham/usage';
-const USER_AGENT = 'chatgpt-usage-gnome/0.6.1';
+const RESET_CREDITS_URL = 'https://chatgpt.com/backend-api/wham/rate-limit-reset-credits';
+const SUBSCRIPTION_URL = 'https://chatgpt.com/backend-api/subscriptions';
+const SUBSCRIPTION_CACHE_MS = 6 * 60 * 60 * 1000;
+const USER_AGENT = 'chatgpt-usage-gnome/0.7.0';
 
 export type FetchErrorKind = 'auth' | 'rate-limit' | 'network' | 'server' | 'invalid-response';
 
@@ -40,6 +48,11 @@ function failure(kind: FetchErrorKind, message: string, retryAfterSeconds: numbe
 
 export class UsageApi {
     private readonly http = new HttpClient();
+    private subscriptionCache: {
+        readonly accountId: string;
+        readonly fetchedAtMs: number;
+        readonly info: {readonly activeUntilMs: number; readonly willRenew: boolean | null};
+    } | null = null;
 
     async fetch(): Promise<FetchResult> {
         let credentials;
@@ -92,10 +105,77 @@ export class UsageApi {
             return failure('invalid-response', 'Usage service returned invalid JSON.');
         }
 
+        let usage: UsageSnapshot;
         try {
-            return {ok: true, usage: parseUsageResponse(json)};
+            usage = parseUsageResponse(json);
         } catch {
             return failure('invalid-response', 'Usage response format is not recognized.');
+        }
+
+        const [resetCreditsAvailable, subscription] = await Promise.all([
+            usage.resetCreditsAvailable === null
+                ? this.fetchResetCredits(headers)
+                : Promise.resolve(usage.resetCreditsAvailable),
+            this.fetchSubscription(credentials.accessToken, credentials.accountId),
+        ]);
+
+        return {
+            ok: true,
+            usage: {
+                ...usage,
+                resetCreditsAvailable: resetCreditsAvailable ?? usage.resetCreditsAvailable,
+                planActiveUntilMs: subscription?.activeUntilMs ?? null,
+                willRenew: subscription?.willRenew ?? null,
+            },
+        };
+    }
+
+    private async fetchResetCredits(
+        headers: Readonly<Record<string, string>>,
+    ): Promise<number | null> {
+        try {
+            const response = await this.http.request('GET', RESET_CREDITS_URL, headers);
+            if (response.status < 200 || response.status >= 300)
+                return null;
+            return parseResetCreditsResponse(JSON.parse(response.text) as unknown);
+        } catch {
+            return null;
+        }
+    }
+
+    private async fetchSubscription(
+        accessToken: string,
+        accountId: string | null,
+    ): Promise<{readonly activeUntilMs: number; readonly willRenew: boolean | null} | null> {
+        if (accountId === null)
+            return null;
+
+        const nowMs = Date.now();
+        if (this.subscriptionCache?.accountId === accountId &&
+            nowMs - this.subscriptionCache.fetchedAtMs < SUBSCRIPTION_CACHE_MS) {
+            return this.subscriptionCache.info;
+        }
+
+        const headers: Record<string, string> = {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: 'application/json',
+            'ChatGPT-Account-Id': accountId,
+            'OpenAI-Beta': 'codex-1',
+            Originator: 'Codex Desktop',
+            'User-Agent': USER_AGENT,
+        };
+
+        try {
+            const url = `${SUBSCRIPTION_URL}?account_id=${encodeURIComponent(accountId)}`;
+            const response = await this.http.request('GET', url, headers, true);
+            if (response.status < 200 || response.status >= 300)
+                return null;
+            const info = parseSubscriptionResponse(JSON.parse(response.text) as unknown);
+            if (info !== null)
+                this.subscriptionCache = {accountId, fetchedAtMs: nowMs, info};
+            return info;
+        } catch {
+            return null;
         }
     }
 

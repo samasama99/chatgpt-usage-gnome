@@ -12,6 +12,7 @@ import {
     compactModelActivity,
     displayModelName,
     formatTokenCount,
+    formatUsd,
     type ModelActivitySnapshot,
 } from './activity-model.js';
 import type {FetchFailure} from './api.js';
@@ -137,6 +138,7 @@ class ModelActivitySection {
     readonly actor: St.BoxLayout;
     private readonly rows: St.BoxLayout;
     private readonly subtitle: St.Label;
+    private readonly costLabel: St.Label;
 
     constructor() {
         this.actor = new St.BoxLayout({
@@ -168,13 +170,20 @@ class ModelActivitySection {
             x_expand: true,
         } as never);
 
+        this.costLabel = new St.Label({
+            text: '',
+            style_class: 'chatgpt-activity-subtitle',
+        });
+
         this.actor.add_child(heading);
+        this.actor.add_child(this.costLabel);
         this.actor.add_child(this.rows);
         this.showLoading();
     }
 
     showLoading(): void {
         this.clearRows();
+        this.costLabel.visible = false;
         this.rows.add_child(new St.Label({
             text: 'Reading local model activity…',
             style_class: 'chatgpt-activity-empty',
@@ -183,6 +192,7 @@ class ModelActivitySection {
 
     showError(): void {
         this.clearRows();
+        this.costLabel.visible = false;
         this.rows.add_child(new St.Label({
             text: 'Local model activity unavailable',
             style_class: 'chatgpt-activity-empty',
@@ -193,6 +203,19 @@ class ModelActivitySection {
         this.clearRows();
         const sources = snapshot.sources.length > 0 ? snapshot.sources.join(' + ') : 'Local';
         this.subtitle.text = `${sources} · ${snapshot.windowDays} days · ${formatTokenCount(snapshot.totalTokens)} tokens`;
+
+        if (snapshot.pricedTokens > 0) {
+            const coverage = snapshot.totalTokens > 0
+                ? Math.round(snapshot.pricedTokens / snapshot.totalTokens * 100)
+                : 0;
+            this.costLabel.text = coverage >= 100
+                ? `API equivalent · ${formatUsd(snapshot.apiEquivalentUsd)}`
+                : `API equivalent · ${formatUsd(snapshot.apiEquivalentUsd)} · ${coverage}% priced`;
+            this.costLabel.visible = true;
+        } else {
+            this.costLabel.text = '';
+            this.costLabel.visible = false;
+        }
 
         const rows = compactModelActivity(snapshot, 4);
         if (rows.length === 0) {
@@ -267,6 +290,8 @@ export class UsageIndicator {
     private readonly fiveHourRow: UsageRow;
     private readonly weeklyRow: UsageRow;
     private readonly planLabel: St.Label;
+    private readonly resetCreditsLabel: St.Label;
+    private readonly billingLabel: St.Label;
     private readonly errorLabel: St.Label;
     private readonly footerLabel: St.Label;
     private readonly onOpen: OpenListener;
@@ -366,6 +391,18 @@ export class UsageIndicator {
             style_class: 'chatgpt-plan',
         });
         heading.add_child(this.planLabel);
+
+        this.resetCreditsLabel = new St.Label({
+            text: '',
+            style_class: 'chatgpt-plan',
+        });
+        heading.add_child(this.resetCreditsLabel);
+
+        this.billingLabel = new St.Label({
+            text: '',
+            style_class: 'chatgpt-plan',
+        });
+        heading.add_child(this.billingLabel);
         header.add_child(heading);
 
         this.fiveHourRow = new UsageRow('5-hour');
@@ -487,6 +524,32 @@ export class UsageIndicator {
         this.panelLabel.text = formatPanel(snapshot);
         this.planLabel.text = displayPlan(snapshot?.plan ?? null);
         this.planLabel.visible = this.planLabel.text.length > 0;
+
+        const resetCredits = snapshot?.resetCreditsAvailable ?? null;
+        this.resetCreditsLabel.text = resetCredits === null
+            ? ''
+            : `Reset credits · ${resetCredits}`;
+        this.resetCreditsLabel.visible = resetCredits !== null;
+
+        const activeUntil = snapshot?.planActiveUntilMs ?? null;
+        if (activeUntil !== null) {
+            const date = new Date(activeUntil);
+            const formatted = date.toLocaleDateString(undefined, {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+            });
+            this.billingLabel.text = snapshot?.willRenew === true
+                ? `Next billing · ${formatted}`
+                : snapshot?.willRenew === false
+                    ? `Plan active until · ${formatted}`
+                    : `Subscription date · ${formatted}`;
+            this.billingLabel.visible = true;
+        } else {
+            this.billingLabel.text = '';
+            this.billingLabel.visible = false;
+        }
+
         this.fiveHourRow.update(snapshot?.fiveHour ?? null, nowMs);
         this.weeklyRow.update(snapshot?.weekly ?? null, nowMs);
 

@@ -1,8 +1,11 @@
 import { AuthError, loadCodexCredentials } from './auth.js';
 import { HttpClient } from './http.js';
-import { parseUsageResponse } from './model.js';
+import { parseResetCreditsResponse, parseSubscriptionResponse, parseUsageResponse } from './model.js';
 const USAGE_URL = 'https://chatgpt.com/backend-api/wham/usage';
-const USER_AGENT = 'chatgpt-usage-gnome/0.1';
+const RESET_CREDITS_URL = 'https://chatgpt.com/backend-api/wham/rate-limit-reset-credits';
+const SUBSCRIPTION_URL = 'https://chatgpt.com/backend-api/subscriptions';
+const SUBSCRIPTION_CACHE_MS = 6 * 60 * 60 * 1000;
+const USER_AGENT = 'chatgpt-usage-gnome/0.7.0';
 function parseRetryAfter(value) {
     if (value === null)
         return null;
@@ -19,6 +22,7 @@ function failure(kind, message, retryAfterSeconds = null) {
 }
 export class UsageApi {
     http = new HttpClient();
+    subscriptionCache = null;
     async fetch() {
         let credentials;
         try {
@@ -60,13 +64,77 @@ export class UsageApi {
         catch {
             return failure('invalid-response', 'Usage service returned invalid JSON.');
         }
+        let usage;
         try {
-            return { ok: true, usage: parseUsageResponse(json) };
+            usage = parseUsageResponse(json);
         }
         catch {
             return failure('invalid-response', 'Usage response format is not recognized.');
         }
+
+        const [resetCreditsAvailable, subscription] = await Promise.all([
+            usage.resetCreditsAvailable === null
+                ? this.fetchResetCredits(headers)
+                : Promise.resolve(usage.resetCreditsAvailable),
+            this.fetchSubscription(credentials.accessToken, credentials.accountId),
+        ]);
+
+        return {
+            ok: true,
+            usage: {
+                ...usage,
+                resetCreditsAvailable: resetCreditsAvailable ?? usage.resetCreditsAvailable,
+                planActiveUntilMs: subscription?.activeUntilMs ?? null,
+                willRenew: subscription?.willRenew ?? null,
+            },
+        };
     }
+    async fetchResetCredits(headers) {
+        try {
+            const response = await this.http.request('GET', RESET_CREDITS_URL, headers);
+            if (response.status < 200 || response.status >= 300)
+                return null;
+            return parseResetCreditsResponse(JSON.parse(response.text));
+        }
+        catch {
+            return null;
+        }
+    }
+
+    async fetchSubscription(accessToken, accountId) {
+        if (accountId === null)
+            return null;
+
+        const nowMs = Date.now();
+        if (this.subscriptionCache?.accountId === accountId &&
+            nowMs - this.subscriptionCache.fetchedAtMs < SUBSCRIPTION_CACHE_MS) {
+            return this.subscriptionCache.info;
+        }
+
+        const headers = {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: 'application/json',
+            'ChatGPT-Account-Id': accountId,
+            'OpenAI-Beta': 'codex-1',
+            Originator: 'Codex Desktop',
+            'User-Agent': USER_AGENT,
+        };
+
+        try {
+            const url = `${SUBSCRIPTION_URL}?account_id=${encodeURIComponent(accountId)}`;
+            const response = await this.http.request('GET', url, headers, true);
+            if (response.status < 200 || response.status >= 300)
+                return null;
+            const info = parseSubscriptionResponse(JSON.parse(response.text));
+            if (info !== null)
+                this.subscriptionCache = {accountId, fetchedAtMs: nowMs, info};
+            return info;
+        }
+        catch {
+            return null;
+        }
+    }
+
     dispose() {
         this.http.dispose();
     }

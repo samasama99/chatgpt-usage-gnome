@@ -117,6 +117,8 @@ export function parseUsageResponse(value, fetchedAtMs = Date.now()) {
         resetCreditsAvailable: resetCreditsAvailable === null
             ? null
             : Math.max(0, Math.trunc(resetCreditsAvailable)),
+        planActiveUntilMs: null,
+        willRenew: null,
         fetchedAtMs,
     };
 }
@@ -182,4 +184,38 @@ export function formatAge(timestampMs, nowMs = Date.now()) {
     if (minutes < 60)
         return `Updated ${minutes}m ago`;
     return `Updated ${Math.floor(minutes / 60)}h ago`;
+}
+
+
+export function parseResetCreditsResponse(value) {
+    if (!isRecord(value))
+        return null;
+
+    const count = finiteNumber(value.available_count ?? value.availableCount);
+    return count === null ? null : Math.max(0, Math.trunc(count));
+}
+
+export function parseSubscriptionResponse(value) {
+    if (!isRecord(value))
+        return null;
+
+    const candidate = isRecord(value.data) ? value.data : value;
+    const activeUntil = candidate.active_until ?? candidate.activeUntil;
+
+    let activeUntilMs = Number.NaN;
+    if (typeof activeUntil === 'string')
+        activeUntilMs = Date.parse(activeUntil);
+    else if (typeof activeUntil === 'number' && Number.isFinite(activeUntil))
+        activeUntilMs = activeUntil > 10_000_000_000
+            ? activeUntil
+            : activeUntil * 1000;
+
+    if (!Number.isFinite(activeUntilMs))
+        return null;
+
+    const renewValue = candidate.will_renew ?? candidate.willRenew;
+    return {
+        activeUntilMs: Math.trunc(activeUntilMs),
+        willRenew: typeof renewValue === 'boolean' ? renewValue : null,
+    };
 }

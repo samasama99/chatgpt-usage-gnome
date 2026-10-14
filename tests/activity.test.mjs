@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import {compactModelActivity, displayModelName, formatTokenCount, mergeModelActivity, parseCodexRollout, parseOpenCodeStats, summarizeModelActivity} from '../extension/activity-model.js';
+import {compactModelActivity, displayModelName, estimateApiEquivalentCost, formatTokenCount, formatUsd, mergeModelActivity, parseCodexRollout, parseOpenCodeStats, summarizeModelActivity} from '../extension/activity-model.js';
 
 const line = (timestamp, type, payload) => JSON.stringify({timestamp, type, payload});
 
@@ -19,7 +19,12 @@ test('maps token usage records to the model for their turn', () => {
         }),
     ].join('\n');
 
-    assert.deepEqual(parseCodexRollout(text), [
+    const records = parseCodexRollout(text);
+    assert.deepEqual(records.map(record => ({
+        timestampMs: record.timestampMs,
+        model: record.model,
+        tokens: record.tokens,
+    })), [
         {timestampMs: Date.parse('2026-09-28T10:00:02Z'), model: 'gpt-5.6-sol', tokens: 120},
         {timestampMs: Date.parse('2026-09-28T10:01:02Z'), model: 'gpt-5.6-codex', tokens: 80},
     ]);
@@ -71,12 +76,16 @@ test('compacts long model lists into Other', () => {
         ],
     };
 
-    assert.deepEqual(compactModelActivity(snapshot, 4), [
-        {model: 'a', tokens: 400, sharePercent: 40},
-        {model: 'b', tokens: 250, sharePercent: 25},
-        {model: 'c', tokens: 150, sharePercent: 15},
-        {model: 'Other', tokens: 200, sharePercent: 20},
-    ]);
+    assert.deepEqual(
+        compactModelActivity(snapshot, 4)
+            .map(row => ({model: row.model, tokens: row.tokens, sharePercent: row.sharePercent})),
+        [
+            {model: 'a', tokens: 400, sharePercent: 40},
+            {model: 'b', tokens: 250, sharePercent: 25},
+            {model: 'c', tokens: 150, sharePercent: 15},
+            {model: 'Other', tokens: 200, sharePercent: 20},
+        ],
+    );
 });
 
 test('formats compact token counts and model names', () => {
@@ -132,4 +141,25 @@ test('merges OpenCode OpenAI usage with Codex and ignores unrelated providers', 
         ['gpt-5.5', 500],
         ['gpt-5.6-sol', 400],
     ]);
+});
+
+
+test('estimates API-equivalent cost from token categories', () => {
+    const cost = estimateApiEquivalentCost('gpt-6.1-sol', {
+        uncachedInputTokens: 500_000,
+        cachedInputTokens: 500_000,
+        cacheWriteInputTokens: 100_000,
+        outputTokens: 200_000,
+        totalTokens: 1_300_000,
+    });
+
+    assert.equal(cost, 3.3);
+    assert.equal(formatUsd(cost), '$3.30');
+    assert.equal(estimateApiEquivalentCost('unknown-model', {
+        uncachedInputTokens: 100,
+        cachedInputTokens: 0,
+        cacheWriteInputTokens: 0,
+        outputTokens: 10,
+        totalTokens: 110,
+    }), null);
 });

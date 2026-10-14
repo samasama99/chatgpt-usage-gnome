@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import {detectedConsumption, formatPanel, parseUsageResponse, progressScale} from '../extension/model.js';
+import {detectedConsumption, formatPanel, parseResetCreditsResponse, parseSubscriptionResponse, parseUsageResponse, progressScale} from '../extension/model.js';
 
 test('parses primary and secondary windows', () => {
     const snapshot = parseUsageResponse({
@@ -82,4 +82,39 @@ test('progress scale clamps cleanly at percentage boundaries', () => {
     assert.equal(progressScale(100), 1);
     assert.equal(progressScale(120), 1);
     assert.equal(progressScale(Number.NaN), 0);
+});
+
+
+test('parses available reset credits when the backend exposes them', () => {
+    const snapshot = parseUsageResponse({
+        rate_limit: {
+            primary_window: {used_percent: 20, limit_window_seconds: 18_000},
+        },
+        rate_limit_reset_credits: {
+            available_count: 3,
+        },
+    });
+
+    assert.equal(snapshot.resetCreditsAvailable, 3);
+});
+
+
+test('parses reset-credit detail responses', () => {
+    assert.equal(parseResetCreditsResponse({available_count: 2}), 2);
+    assert.equal(parseResetCreditsResponse({availableCount: 4}), 4);
+    assert.equal(parseResetCreditsResponse({}), null);
+});
+
+test('parses subscription renewal metadata when available', () => {
+    const renewal = parseSubscriptionResponse({
+        active_until: '2026-11-14T09:30:00Z',
+        will_renew: true,
+    });
+
+    assert.deepEqual(renewal, {
+        activeUntilMs: Date.parse('2026-11-14T09:30:00Z'),
+        willRenew: true,
+    });
+
+    assert.equal(parseSubscriptionResponse({will_renew: true}), null);
 });
