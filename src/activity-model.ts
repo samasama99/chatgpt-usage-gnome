@@ -384,7 +384,7 @@ export function parseOpenCodeStats(text: string): ReadonlyMap<string, number> {
 
 export function mergeModelActivity(
     codex: ModelActivitySnapshot,
-    openCodeTotals: ReadonlyMap<string, TokenBreakdown>,
+    openCodeTotals: ReadonlyMap<string, TokenBreakdown | number>,
 ): ModelActivitySnapshot {
     const totals = new Map<string, TokenBreakdown>();
 
@@ -392,13 +392,17 @@ export function mergeModelActivity(
         totals.set(row.model, normalizeBreakdown(row));
 
     let openCodeTokens = 0;
-    for (const [qualifiedModel, usage] of openCodeTotals) {
+    for (const [qualifiedModel, rawUsage] of openCodeTotals) {
         const slash = qualifiedModel.indexOf('/');
         const provider = slash >= 0 ? qualifiedModel.slice(0, slash).toLowerCase() : '';
         const model = slash >= 0 ? qualifiedModel.slice(slash + 1) : qualifiedModel;
 
         if (provider && provider !== 'openai' && provider !== 'chatgpt')
             continue;
+
+        const usage = typeof rawUsage === 'number'
+            ? normalizeBreakdown({tokens: rawUsage})
+            : normalizeBreakdown(rawUsage);
         if (usage.totalTokens <= 0)
             continue;
 
