@@ -463,6 +463,11 @@ export class UsageIndicator {
         this.panelLabel.text = formatPanel(snapshot);
         this.planLabel.text = displayPlan(snapshot?.plan ?? null);
         this.planLabel.visible = this.planLabel.text.length > 0;
+        const resetCredits = snapshot?.resetCreditsAvailable ?? null;
+        this.resetCreditsLabel.text = resetCredits === null
+            ? ''
+            : `Reset credits available: ${resetCredits}`;
+        this.resetCreditsLabel.visible = resetCredits !== null;
         this.fiveHourRow.update(snapshot?.fiveHour ?? null, nowMs);
         this.weeklyRow.update(snapshot?.weekly ?? null, nowMs);
 
