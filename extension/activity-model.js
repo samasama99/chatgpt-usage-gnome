@@ -233,7 +233,7 @@ export function mergeModelActivity(codex, openCodeTotals) {
     const totals = new Map();
 
     for (const row of codex.models)
-        totals.set(row.model, (totals.get(row.model) ?? 0) + row.tokens);
+        totals.set(row.model, normalizedBreakdown(row));
 
     let openCodeTokens = 0;
     for (const [qualifiedModel, tokens] of openCodeTotals) {
