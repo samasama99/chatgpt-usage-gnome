@@ -8,7 +8,9 @@ The extension:
 
 - reads the existing Codex auth file;
 - extracts only the access token and optional account ID needed for the usage request;
-- sends authenticated requests only to `https://chatgpt.com/backend-api/wham/usage`;
+- sends authenticated read-only requests only to fixed `chatgpt.com` usage/reset/subscription endpoints;
+- uses the primary usage payload for reset counts when possible and only falls back to the reset-credit endpoint when the count is absent;
+- caches subscription metadata for six hours to avoid attaching sensitive credentials to unnecessary repeated requests;
 - refuses HTTP redirects for authenticated requests;
 - disables libsoup's authentication cache;
 - never writes, refreshes, copies, persists, or logs OAuth credentials;
@@ -35,7 +37,7 @@ The extension trusts the local GNOME user session, the local Codex credential fi
 
 A malicious process already running as the same desktop user can generally read the same credential file, so this extension is not intended to defend against a compromised user session.
 
-The usage endpoint is internal rather than a documented public API. Response data is validated before reaching the UI.
+The ChatGPT usage/reset/subscription endpoints are internal rather than documented public APIs. Response data is validated before reaching the UI; optional metadata failures are treated as unavailable and do not break the main usage display.
 
 ## Credential hygiene
 
