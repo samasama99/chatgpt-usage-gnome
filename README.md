@@ -17,7 +17,7 @@ Click the indicator to see the 5-hour and weekly windows, progress bars, reset c
 - Talks directly from GNOME Shell to `chatgpt.com`.
 - Stores no tokens, usage history, analytics, or telemetry.
 - Runs no daemon or helper server. If OpenCode is installed, the popup may invoke `opencode stats` with fixed arguments to read its local 7-day model totals.
-- Supports GNOME Shell 46–50.
+- Supports GNOME Shell 46–51.
 
 ## Preferences
 
