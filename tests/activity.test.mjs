@@ -163,3 +163,61 @@ test('estimates API-equivalent cost from token categories', () => {
         totalTokens: 110,
     }), null);
 });
+
+test('parses Claude Code sessions and de-duplicates repeated message lines', async () => {
+    const {parseClaudeCodeSession} = await import('../extension/activity-model.js');
+    const usage = {input_tokens: 10, cache_creation_input_tokens: 1_000, cache_read_input_tokens: 5_000, output_tokens: 200};
+    const assistant = (id, model, extra = {}) => JSON.stringify({
+        type: 'assistant',
+        timestamp: '2026-11-26T10:00:00Z',
+        message: {id, model, usage: {...usage, ...extra}},
+    });
+
+    const text = [
+        JSON.stringify({type: 'user', timestamp: '2026-11-26T09:59:00Z', message: {content: 'secret prompt'}}),
+        assistant('msg_1', 'claude-opus-5-5', {output_tokens: 50}),
+        assistant('msg_1', 'claude-opus-5-5'),
+        assistant('msg_2', 'claude-haiku-4-5-20251001'),
+        assistant('msg_3', '<synthetic>'),
+        'not json',
+    ].join('\n');
+
+    const records = parseClaudeCodeSession(text);
+    assert.deepEqual(records.map(record => [record.id, record.model, record.tokens]), [
+        ['msg_1', 'claude-opus-5-5', 6_210],
+        ['msg_2', 'claude-haiku-4-5', 6_210],
+    ]);
+    assert.equal(records[0]?.cachedInputTokens, 5_000);
+    assert.equal(records[0]?.cacheWriteInputTokens, 1_000);
+});
+
+test('prices Claude models and names them for display', () => {
+    const cost = estimateApiEquivalentCost('claude-opus-5-5', {
+        uncachedInputTokens: 1_000_000,
+        cachedInputTokens: 1_000_000,
+        cacheWriteInputTokens: 0,
+        outputTokens: 100_000,
+        totalTokens: 2_100_000,
+    });
+    assert.equal(cost, 6.2);
+    assert.equal(displayModelName('claude-opus-5-5'), 'Claude Opus 5.5');
+    assert.equal(displayModelName('claude-sonnet-5'), 'Claude Sonnet 5');
+    assert.equal(displayModelName('claude-haiku-4-5-20251001'), 'Claude Haiku 4.5');
+});
+
+test('OpenCode merge keeps only the allowed providers', async () => {
+    const {OPENCODE_CLAUDE_PROVIDERS, combineModelActivity} = await import('../extension/activity-model.js');
+    const now = Date.parse('2026-11-26T12:00:00Z');
+    const codex = summarizeModelActivity([{timestampMs: now - 1_000, model: 'gpt-5.5', tokens: 100}], now, 7, 'Codex');
+    const claude = summarizeModelActivity([{timestampMs: now - 1_000, model: 'claude-opus-5-5', tokens: 300}], now, 7, 'Claude Code');
+    const combined = combineModelActivity([codex, claude], now, 7);
+    assert.deepEqual(combined.sources, ['Codex', 'Claude Code']);
+    assert.equal(combined.totalTokens, 400);
+
+    const merged = mergeModelActivity(claude, new Map([
+        ['openai/gpt-5.5', 1_000],
+        ['anthropic/claude-opus-5-5', 200],
+    ]), OPENCODE_CLAUDE_PROVIDERS);
+    assert.deepEqual(merged.models.map(row => [row.model, row.tokens]), [['claude-opus-5-5', 500]]);
+    assert.deepEqual(merged.sources, ['Claude Code', 'OpenCode']);
+});

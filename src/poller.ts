@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 import GLib from 'gi://GLib';
-import {UsageApi, type FetchFailure} from './api.js';
+import type {FetchFailure, UsageSource} from './api.js';
 import {detectedConsumption, type UsageSnapshot} from './model.js';
+import type {ProviderId} from './settings-model.js';
 import {failureBackoffSeconds, isStale, nextSuccessSchedule, POPUP_STALE_AFTER_SECONDS} from './schedule.js';
 
 export interface PollerState {
+    readonly provider: ProviderId;
     readonly usage: UsageSnapshot | null;
     readonly lastSuccessMs: number | null;
     readonly error: FetchFailure | null;
@@ -15,17 +17,19 @@ export interface PollerState {
 type StateListener = (state: PollerState) => void;
 
 export class UsagePoller {
-    private readonly api = new UsageApi();
+    private readonly api: UsageSource;
     private readonly onState: StateListener;
     private timerId = 0;
     private stopped = true;
     private inFlight = false;
     private activityIndex: number | null = null;
     private consecutiveFailures = 0;
-    private state: PollerState = {usage: null, lastSuccessMs: null, error: null, updating: false};
+    private state: PollerState;
 
-    constructor(onState: StateListener) {
+    constructor(source: UsageSource, onState: StateListener) {
+        this.api = source;
         this.onState = onState;
+        this.state = {provider: source.provider, usage: null, lastSuccessMs: null, error: null, updating: false};
     }
 
     start(): void {

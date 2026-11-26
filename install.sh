@@ -79,14 +79,16 @@ elif [[ -f "$HOME/.config/codex/auth.json" ]]; then
     auth_file="$HOME/.config/codex/auth.json"
 fi
 
-if [[ -z "$auth_file" ]]; then
-    say 'warning: Codex login was not found. Run `codex login` before using the extension.'
+claude_dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+if [[ -z "$auth_file" && ! -f "$claude_dir/.credentials.json" ]]; then
+    say 'warning: no Codex or Claude Code login was found.'
+    say '  Run `codex login` (ChatGPT) and/or `claude` (Claude) before using the extension.'
 fi
 
 if gnome-extensions enable "$UUID" >/dev/null 2>&1; then
-    say "Installed and enabled ChatGPT Usage for GNOME Shell $major."
+    say "Installed and enabled AI Usage for GNOME Shell $major."
 else
-    say "Installed ChatGPT Usage for GNOME Shell $major."
+    say "Installed AI Usage for GNOME Shell $major."
     say 'GNOME has not loaded this extension yet. Log out and back in once, then run:'
     say "  gnome-extensions enable $UUID"
 fi

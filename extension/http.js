@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Soup from 'gi://Soup?version=3.0';
@@ -24,7 +25,7 @@ export class HttpClient {
         return new Promise((resolve, reject) => {
             this.session.send_and_read_async(message, GLib.PRIORITY_DEFAULT, this.cancellable, (session, result) => {
                 try {
-                    const bytes = session.send_and_read_finish(result);
+                    const bytes = this.session.send_and_read_finish(result);
                     const data = bytes.get_data() ?? new Uint8Array();
                     resolve({
                         status: message.status_code,

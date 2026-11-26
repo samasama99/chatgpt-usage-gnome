@@ -1,27 +1,27 @@
-.chatgpt-panel {
+.usage-panel {
     spacing: 6px;
 }
 
-.chatgpt-panel-icon {
+.usage-panel-icon {
     margin-right: 1px;
 }
 
-.chatgpt-panel-label {
+.usage-panel-label {
     font-weight: 600;
 }
 
-.chatgpt-popup {
+.usage-popup {
     min-width: 286px;
     spacing: 11px;
     padding: 7px 5px 5px 5px;
 }
 
-.chatgpt-header {
+.usage-header {
     spacing: 10px;
     padding: 1px 1px 5px 1px;
 }
 
-.chatgpt-header-icon-shell {
+.usage-header-icon-shell {
     width: 36px;
     height: 36px;
     padding: 7px;
@@ -29,127 +29,136 @@
     background-color: rgba(255, 255, 255, 0.08);
 }
 
-.chatgpt-header-icon {
-    color: #f7f7f8;
-}
-
-.chatgpt-title {
+.usage-title {
     font-weight: 700;
     font-size: 1.16em;
 }
 
-.chatgpt-plan {
+.usage-provider {
+    spacing: 7px;
+}
+
+.usage-provider-heading {
+    spacing: 8px;
+    padding: 0 2px;
+}
+
+.usage-provider-title {
+    font-weight: 650;
+}
+
+.usage-plan {
     opacity: 0.62;
     font-size: 0.92em;
 }
 
-.chatgpt-usage-card {
+.usage-usage-card {
     spacing: 7px;
     padding: 9px 10px;
     border-radius: 12px;
     background-color: rgba(255, 255, 255, 0.045);
 }
 
-.chatgpt-usage-header {
+.usage-usage-header {
     spacing: 10px;
 }
 
-.chatgpt-usage-title {
+.usage-usage-title {
     font-weight: 600;
     opacity: 0.84;
 }
 
-.chatgpt-usage-value {
+.usage-usage-value {
     font-weight: 700;
     font-size: 1.15em;
 }
 
-.chatgpt-progress-track {
+.usage-progress-track {
     background-color: rgba(255, 255, 255, 0.10);
     border-radius: 99px;
 }
 
-.chatgpt-progress-fill {
-    background-color: #10a37f;
+.usage-progress-fill {
+    background-color: #3584e4;
     border-radius: 99px;
 }
 
-.chatgpt-progress-warning {
+.usage-progress-warning {
     background-color: #f0a044;
 }
 
-.chatgpt-progress-critical {
+.usage-progress-critical {
     background-color: #ef4146;
 }
 
-.chatgpt-reset,
-.chatgpt-footer {
+.usage-reset,
+.usage-footer {
     opacity: 0.62;
     font-size: 0.92em;
 }
 
-.chatgpt-error {
+.usage-error {
     color: #ef6a6f;
     padding: 1px 2px;
 }
 
-.chatgpt-footer {
+.usage-footer {
     padding: 1px 2px 2px 2px;
 }
 
 
-.chatgpt-section-divider {
+.usage-section-divider {
     background-color: rgba(255, 255, 255, 0.10);
     margin: 2px 0 1px 0;
 }
 
-.chatgpt-activity {
+.usage-activity {
     spacing: 7px;
     padding: 3px 2px 1px 2px;
 }
 
-.chatgpt-activity-heading {
+.usage-activity-heading {
     spacing: 8px;
 }
 
-.chatgpt-activity-title {
+.usage-activity-title {
     font-weight: 650;
 }
 
-.chatgpt-activity-subtitle,
-.chatgpt-activity-empty,
-.chatgpt-activity-value {
+.usage-activity-subtitle,
+.usage-activity-empty,
+.usage-activity-value {
     opacity: 0.62;
     font-size: 0.88em;
 }
 
-.chatgpt-activity-rows {
+.usage-activity-rows {
     spacing: 5px;
 }
 
-.chatgpt-activity-row {
+.usage-activity-row {
     spacing: 10px;
 }
 
-.chatgpt-activity-model {
+.usage-activity-model {
     font-weight: 550;
 }
 
-.chatgpt-activity-value {
+.usage-activity-value {
     font-variant-numeric: tabular-nums;
 }
 
-.chatgpt-footer-row {
+.usage-footer-row {
     spacing: 8px;
 }
 
-.chatgpt-refresh-button {
+.usage-button {
     padding: 4px 9px;
     border-radius: 8px;
     background-color: rgba(255, 255, 255, 0.07);
 }
 
-.chatgpt-refresh-button:hover,
-.chatgpt-refresh-button:focus {
+.usage-button:hover,
+.usage-button:focus {
     background-color: rgba(255, 255, 255, 0.12);
 }

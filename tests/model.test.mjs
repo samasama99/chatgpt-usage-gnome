@@ -118,3 +118,30 @@ test('parses subscription renewal metadata when available', () => {
 
     assert.equal(parseSubscriptionResponse({will_renew: true}), null);
 });
+
+test('parses Claude five-hour and seven-day utilization', async () => {
+    const {parseClaudeUsageResponse} = await import('../extension/model.js');
+    const snapshot = parseClaudeUsageResponse({
+        five_hour: {utilization: 36, resets_at: '2026-11-26T18:00:00.000Z'},
+        seven_day: {utilization: 9.4, resets_at: '2026-12-01T09:00:00+00:00'},
+        seven_day_opus: null,
+    }, 'max', 1234);
+
+    assert.equal(snapshot.fiveHour?.remainingPercent, 64);
+    assert.equal(snapshot.fiveHour?.resetAtMs, Date.parse('2026-11-26T18:00:00.000Z'));
+    assert.equal(Math.round(snapshot.weekly?.remainingPercent ?? 0), 91);
+    assert.equal(snapshot.weekly?.windowSeconds, 604_800);
+    assert.equal(snapshot.plan, 'max');
+    assert.equal(snapshot.resetCreditsAvailable, null);
+    assert.equal(formatPanel(snapshot, 'Claude'), 'Claude 5h 64% · W 91%');
+});
+
+test('Claude usage handles missing windows and rejects empty payloads', async () => {
+    const {parseClaudeUsageResponse} = await import('../extension/model.js');
+    const snapshot = parseClaudeUsageResponse({five_hour: null, seven_day: {utilization: 120, resets_at: null}});
+    assert.equal(snapshot.fiveHour, null);
+    assert.equal(snapshot.weekly?.remainingPercent, 0);
+    assert.equal(snapshot.weekly?.resetAtMs, null);
+    assert.throws(() => parseClaudeUsageResponse({five_hour: null, seven_day: null}));
+    assert.throws(() => parseClaudeUsageResponse('nope'));
+});

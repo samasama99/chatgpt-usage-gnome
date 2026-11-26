@@ -15,8 +15,21 @@ test('panel position accepts only supported GNOME panel boxes', () => {
 });
 
 test('panel background colors are normalized and validated', () => {
-    assert.equal(normalizePanelColor('#10A37F'), '#10a37f');
+    assert.equal(normalizePanelColor('#3584E4'), '#3584e4');
     assert.equal(normalizePanelColor('  #123456  '), '#123456');
     assert.equal(normalizePanelColor('#fff'), DEFAULT_PANEL_BACKGROUND_COLOR);
     assert.equal(normalizePanelColor('red'), DEFAULT_PANEL_BACKGROUND_COLOR);
+});
+
+test('provider setting resolves to the shown subscriptions', async () => {
+    const {normalizeProviderSetting, resolveProviders} = await import('../extension/settings-model.js');
+    assert.equal(normalizeProviderSetting('claude'), 'claude');
+    assert.equal(normalizeProviderSetting('bogus'), 'auto');
+
+    assert.deepEqual(resolveProviders('auto', {chatgpt: true, claude: false}), ['chatgpt']);
+    assert.deepEqual(resolveProviders('auto', {chatgpt: false, claude: true}), ['claude']);
+    assert.deepEqual(resolveProviders('auto', {chatgpt: true, claude: true}), ['chatgpt', 'claude']);
+    assert.deepEqual(resolveProviders('auto', {chatgpt: false, claude: false}), ['chatgpt', 'claude']);
+    assert.deepEqual(resolveProviders('claude', {chatgpt: true, claude: false}), ['claude']);
+    assert.deepEqual(resolveProviders('both', {chatgpt: false, claude: false}), ['chatgpt', 'claude']);
 });

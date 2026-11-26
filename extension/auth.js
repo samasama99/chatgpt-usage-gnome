@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 Gio._promisify(Gio.File.prototype, 'load_contents_async', 'load_contents_finish');
@@ -7,37 +8,52 @@ export class AuthError extends Error {
 function isRecord(value) {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
-function candidateAuthPaths() {
+function unique(paths) {
+    return [...new Set(paths.filter(path => path.length > 0))];
+}
+function codexAuthPaths() {
     const home = GLib.get_home_dir();
     const codexHome = (GLib.getenv('CODEX_HOME') ?? '').trim();
-    const candidates = [
+    return unique([
         codexHome ? GLib.build_filenamev([codexHome, 'auth.json']) : '',
         GLib.build_filenamev([home, '.codex', 'auth.json']),
         GLib.build_filenamev([home, '.config', 'codex', 'auth.json']),
-    ].filter(path => path.length > 0);
-    return [...new Set(candidates)];
+    ]);
 }
-function firstExistingAuthPath() {
-    for (const path of candidateAuthPaths()) {
+function claudeCredentialPaths() {
+    const configDir = (GLib.getenv('CLAUDE_CONFIG_DIR') ?? '').trim();
+    return unique([
+        configDir ? GLib.build_filenamev([configDir, '.credentials.json']) : '',
+        GLib.build_filenamev([GLib.get_home_dir(), '.claude', '.credentials.json']),
+    ]);
+}
+function firstExisting(paths) {
+    for (const path of paths) {
         if (GLib.file_test(path, GLib.FileTest.IS_REGULAR))
             return path;
     }
-    throw new AuthError('Codex login not found. Run `codex login`.');
+    return null;
 }
-async function readJson(path) {
+export function hasCodexLogin() {
+    return firstExisting(codexAuthPaths()) !== null;
+}
+export function hasClaudeLogin() {
+    return firstExisting(claudeCredentialPaths()) !== null;
+}
+async function readJson(path, label) {
     let contents;
     try {
         const [bytes] = await Gio.File.new_for_path(path).load_contents_async(null);
         contents = bytes;
     }
     catch {
-        throw new AuthError(`Cannot read Codex authentication file: ${path}`);
+        throw new AuthError(`Cannot read ${label} credential file: ${path}`);
     }
     try {
         return JSON.parse(new TextDecoder().decode(contents));
     }
     catch {
-        throw new AuthError('Codex authentication file is not valid JSON.');
+        throw new AuthError(`${label} credential file is not valid JSON.`);
     }
 }
 function stringValue(record, keys) {
@@ -61,7 +77,38 @@ export function parseCodexCredentials(value) {
     return { accessToken, accountId };
 }
 export async function loadCodexCredentials() {
-    const path = firstExistingAuthPath();
-    const json = await readJson(path);
-    return parseCodexCredentials(json);
+    const path = firstExisting(codexAuthPaths());
+    if (path === null)
+        throw new AuthError('Codex login not found. Run `codex login`.');
+    return parseCodexCredentials(await readJson(path, 'Codex'));
+}
+/**
+ * Parse Claude Code's OAuth credential file. The extension only reads the
+ * access token: it never refreshes it, because rotating the refresh token
+ * would sign Claude Code out.
+ */
+export function parseClaudeCredentials(value, nowMs = Date.now()) {
+    if (!isRecord(value) || !isRecord(value.claudeAiOauth))
+        throw new AuthError('Claude subscription login not found. Run `claude` and sign in.');
+    const oauth = value.claudeAiOauth;
+    const accessToken = stringValue(oauth, ['accessToken', 'access_token']);
+    if (accessToken === null)
+        throw new AuthError('Claude access token is missing. Run `claude` and sign in.');
+    const expiresAt = oauth.expiresAt;
+    const expiresAtMs = typeof expiresAt === 'number' && Number.isFinite(expiresAt) && expiresAt > 0
+        ? Math.trunc(expiresAt)
+        : null;
+    if (expiresAtMs !== null && expiresAtMs <= nowMs)
+        throw new AuthError('Claude login expired. Open Claude Code once to refresh it.');
+    return {
+        accessToken,
+        expiresAtMs,
+        subscriptionType: stringValue(oauth, ['subscriptionType']),
+    };
+}
+export async function loadClaudeCredentials() {
+    const path = firstExisting(claudeCredentialPaths());
+    if (path === null)
+        throw new AuthError('Claude login not found. Run `claude` and sign in.');
+    return parseClaudeCredentials(await readJson(path, 'Claude'));
 }

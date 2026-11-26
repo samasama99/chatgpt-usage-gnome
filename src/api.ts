@@ -1,19 +1,22 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-import {AuthError, loadCodexCredentials} from './auth.js';
-import {HttpClient} from './http.js';
+import {AuthError, loadClaudeCredentials, loadCodexCredentials} from './auth.js';
+import {HttpClient, type HttpResponse} from './http.js';
 import {
+    parseClaudeUsageResponse,
     parseResetCreditsResponse,
     parseSubscriptionResponse,
     parseUsageResponse,
     type UsageSnapshot,
 } from './model.js';
+import type {ProviderId} from './settings-model.js';
 
-const USAGE_URL = 'https://chatgpt.com/backend-api/wham/usage';
-const RESET_CREDITS_URL = 'https://chatgpt.com/backend-api/wham/rate-limit-reset-credits';
-const SUBSCRIPTION_URL = 'https://chatgpt.com/backend-api/subscriptions';
+const CHATGPT_USAGE_URL = 'https://chatgpt.com/backend-api/wham/usage';
+const CHATGPT_RESET_CREDITS_URL = 'https://chatgpt.com/backend-api/wham/rate-limit-reset-credits';
+const CHATGPT_SUBSCRIPTION_URL = 'https://chatgpt.com/backend-api/subscriptions';
+const CLAUDE_USAGE_URL = 'https://api.anthropic.com/api/oauth/usage';
 const SUBSCRIPTION_CACHE_MS = 6 * 60 * 60 * 1000;
-const USER_AGENT = 'chatgpt-usage-gnome/0.7.0';
+const USER_AGENT = 'chatgpt-usage-gnome/0.8.0';
 
 export type FetchErrorKind = 'auth' | 'rate-limit' | 'network' | 'server' | 'invalid-response';
 
@@ -26,6 +29,13 @@ export interface FetchFailure {
 export type FetchResult =
     | {readonly ok: true; readonly usage: UsageSnapshot}
     | {readonly ok: false; readonly error: FetchFailure};
+
+/** A provider-specific source of subscription usage. */
+export interface UsageSource {
+    readonly provider: ProviderId;
+    fetch(): Promise<FetchResult>;
+    dispose(): void;
+}
 
 function parseRetryAfter(value: string | null): number | null {
     if (value === null)
@@ -46,7 +56,39 @@ function failure(kind: FetchErrorKind, message: string, retryAfterSeconds: numbe
     return {ok: false, error: {kind, message, retryAfterSeconds}};
 }
 
-export class UsageApi {
+/**
+ * Shared status/JSON handling for a usage response. Returns the parsed JSON on
+ * success, or a failure result.
+ */
+function checkResponse(
+    response: HttpResponse,
+    authRejectedMessage: string,
+): {readonly ok: true; readonly json: unknown} | {readonly ok: false; readonly result: FetchResult} {
+    if (response.status === 401 || response.status === 403)
+        return {ok: false, result: failure('auth', authRejectedMessage)};
+
+    if (response.status === 429) {
+        return {
+            ok: false,
+            result: failure('rate-limit', 'Usage endpoint is rate limited.', parseRetryAfter(response.retryAfter)),
+        };
+    }
+
+    if (response.status >= 500)
+        return {ok: false, result: failure('server', `Usage service returned HTTP ${response.status}.`)};
+
+    if (response.status < 200 || response.status >= 300)
+        return {ok: false, result: failure('server', `Usage request failed with HTTP ${response.status}.`)};
+
+    try {
+        return {ok: true, json: JSON.parse(response.text) as unknown};
+    } catch {
+        return {ok: false, result: failure('invalid-response', 'Usage service returned invalid JSON.')};
+    }
+}
+
+export class ChatGPTUsageApi implements UsageSource {
+    readonly provider = 'chatgpt' as const;
     private readonly http = new HttpClient();
     private subscriptionCache: {
         readonly accountId: string;
@@ -76,38 +118,18 @@ export class UsageApi {
 
         let response;
         try {
-            response = await this.http.request('GET', USAGE_URL, headers);
+            response = await this.http.request('GET', CHATGPT_USAGE_URL, headers);
         } catch {
             return failure('network', 'Network error while updating usage.');
         }
 
-        if (response.status === 401 || response.status === 403)
-            return failure('auth', 'Codex authentication was rejected. Run `codex login`.');
-
-        if (response.status === 429) {
-            return failure(
-                'rate-limit',
-                'Usage endpoint is rate limited.',
-                parseRetryAfter(response.retryAfter),
-            );
-        }
-
-        if (response.status >= 500)
-            return failure('server', `Usage service returned HTTP ${response.status}.`);
-
-        if (response.status < 200 || response.status >= 300)
-            return failure('server', `Usage request failed with HTTP ${response.status}.`);
-
-        let json: unknown;
-        try {
-            json = JSON.parse(response.text) as unknown;
-        } catch {
-            return failure('invalid-response', 'Usage service returned invalid JSON.');
-        }
+        const checked = checkResponse(response, 'Codex authentication was rejected. Run `codex login`.');
+        if (!checked.ok)
+            return checked.result;
 
         let usage: UsageSnapshot;
         try {
-            usage = parseUsageResponse(json);
+            usage = parseUsageResponse(checked.json);
         } catch {
             return failure('invalid-response', 'Usage response format is not recognized.');
         }
@@ -134,7 +156,7 @@ export class UsageApi {
         headers: Readonly<Record<string, string>>,
     ): Promise<number | null> {
         try {
-            const response = await this.http.request('GET', RESET_CREDITS_URL, headers);
+            const response = await this.http.request('GET', CHATGPT_RESET_CREDITS_URL, headers);
             if (response.status < 200 || response.status >= 300)
                 return null;
             return parseResetCreditsResponse(JSON.parse(response.text) as unknown);
@@ -166,7 +188,7 @@ export class UsageApi {
         };
 
         try {
-            const url = `${SUBSCRIPTION_URL}?account_id=${encodeURIComponent(accountId)}`;
+            const url = `${CHATGPT_SUBSCRIPTION_URL}?account_id=${encodeURIComponent(accountId)}`;
             const response = await this.http.request('GET', url, headers, true);
             if (response.status < 200 || response.status >= 300)
                 return null;
@@ -182,4 +204,58 @@ export class UsageApi {
     dispose(): void {
         this.http.dispose();
     }
+}
+
+export class ClaudeUsageApi implements UsageSource {
+    readonly provider = 'claude' as const;
+    private readonly http = new HttpClient();
+
+    async fetch(): Promise<FetchResult> {
+        let credentials;
+        try {
+            credentials = await loadClaudeCredentials();
+        } catch (error: unknown) {
+            if (error instanceof AuthError)
+                return failure('auth', error.message);
+            return failure('auth', 'Unable to load Claude authentication.');
+        }
+
+        const headers: Record<string, string> = {
+            Authorization: `Bearer ${credentials.accessToken}`,
+            Accept: 'application/json',
+            'anthropic-beta': 'oauth-2025-04-20',
+            'User-Agent': USER_AGENT,
+        };
+
+        let response;
+        try {
+            response = await this.http.request('GET', CLAUDE_USAGE_URL, headers);
+        } catch {
+            return failure('network', 'Network error while updating usage.');
+        }
+
+        const checked = checkResponse(
+            response,
+            'Claude authentication was rejected. Open Claude Code to sign in again.',
+        );
+        if (!checked.ok)
+            return checked.result;
+
+        try {
+            return {
+                ok: true,
+                usage: parseClaudeUsageResponse(checked.json, credentials.subscriptionType),
+            };
+        } catch {
+            return failure('invalid-response', 'Usage response format is not recognized.');
+        }
+    }
+
+    dispose(): void {
+        this.http.dispose();
+    }
+}
+
+export function createUsageSource(provider: ProviderId): UsageSource {
+    return provider === 'claude' ? new ClaudeUsageApi() : new ChatGPTUsageApi();
 }

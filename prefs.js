@@ -8,8 +8,10 @@ import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/ex
 
 const POSITIONS = ['left', 'center', 'right'];
 const POSITION_LABELS = ['Left', 'Center', 'Right'];
+const PROVIDERS = ['auto', 'chatgpt', 'claude', 'both'];
+const PROVIDER_LABELS = ['Automatic', 'ChatGPT', 'Claude', 'ChatGPT and Claude'];
 
-export default class ChatGPTUsagePreferences extends ExtensionPreferences {
+export default class AIUsagePreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         const settings = this.getSettings();
         window._settings = settings;
@@ -22,14 +24,37 @@ export default class ChatGPTUsagePreferences extends ExtensionPreferences {
         });
         window.add(page);
 
+        const providerGroup = new Adw.PreferencesGroup({
+            title: 'Subscriptions',
+            description: 'Usage limits come from your existing Codex and Claude Code logins.',
+        });
+        page.add(providerGroup);
+
+        const providerModel = Gtk.StringList.new(PROVIDER_LABELS);
+        const provider = new Adw.ComboRow({
+            title: 'Show usage for',
+            subtitle: 'Automatic shows every service you are signed in to.',
+            model: providerModel,
+        });
+        provider.selected = Math.max(0, PROVIDERS.indexOf(settings.get_string('providers')));
+        provider.connect('notify::selected', () => {
+            settings.set_string('providers', PROVIDERS[provider.selected] ?? 'auto');
+        });
+        settings.connect('changed::providers', () => {
+            const next = PROVIDERS.indexOf(settings.get_string('providers'));
+            if (next >= 0 && provider.selected !== next)
+                provider.selected = next;
+        });
+        providerGroup.add(provider);
+
         const panelGroup = new Adw.PreferencesGroup({
             title: 'Panel',
-            description: 'Choose how ChatGPT Usage appears in the GNOME top bar.',
+            description: 'Choose how AI Usage appears in the GNOME top bar.',
         });
         page.add(panelGroup);
 
         const showIcon = new Adw.SwitchRow({
-            title: 'Show ChatGPT icon',
+            title: 'Show panel icon',
             subtitle: 'Hide the icon and keep only the 5-hour and weekly percentages.',
         });
         settings.bind('show-panel-icon', showIcon, 'active', Gio.SettingsBindFlags.DEFAULT);
@@ -89,13 +114,13 @@ export default class ChatGPTUsagePreferences extends ExtensionPreferences {
 
         const activityGroup = new Adw.PreferencesGroup({
             title: 'Local activity',
-            description: 'Control optional local Codex and OpenCode statistics.',
+            description: 'Control optional local Codex, Claude Code, and OpenCode statistics.',
         });
         page.add(activityGroup);
 
         const localActivity = new Adw.SwitchRow({
             title: 'Show local coding activity',
-            subtitle: 'When disabled, no Codex session scan or OpenCode stats command is run.',
+            subtitle: 'When disabled, no session logs are scanned and no OpenCode stats command is run.',
         });
         settings.bind(
             'show-local-activity',
@@ -111,8 +136,8 @@ export default class ChatGPTUsagePreferences extends ExtensionPreferences {
         page.add(resetGroup);
 
         const resetRow = new Adw.ActionRow({
-            title: 'Reset appearance settings',
-            subtitle: 'Restore the icon, right-side position, transparent background, and local activity.',
+            title: 'Reset settings',
+            subtitle: 'Restore automatic subscriptions, the icon, right-side position, transparent background, and local activity.',
         });
         const resetButton = new Gtk.Button({
             label: 'Reset',
@@ -121,6 +146,7 @@ export default class ChatGPTUsagePreferences extends ExtensionPreferences {
         resetButton.add_css_class('destructive-action');
         resetButton.connect('clicked', () => {
             for (const key of [
+                'providers',
                 'show-panel-icon',
                 'show-local-activity',
                 'panel-position',

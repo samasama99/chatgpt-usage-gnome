@@ -157,6 +157,65 @@ export function parseUsageResponse(value: unknown, fetchedAtMs = Date.now()): Us
     };
 }
 
+const CLAUDE_FIVE_HOUR_SECONDS = 5 * 60 * 60;
+const CLAUDE_WEEKLY_SECONDS = 7 * 24 * 60 * 60;
+
+function parseClaudeWindow(value: unknown, windowSeconds: number): UsageWindow | null {
+    if (!isRecord(value))
+        return null;
+
+    const utilization = firstFiniteNumber(value, ['utilization', 'used_percent']);
+    if (utilization === null)
+        return null;
+
+    const usedPercent = clampPercent(utilization);
+    let resetAtMs: number | null = null;
+    const resetsAt = value.resets_at ?? value.resetsAt;
+    if (typeof resetsAt === 'string') {
+        const parsed = Date.parse(resetsAt);
+        resetAtMs = Number.isFinite(parsed) ? parsed : null;
+    } else if (typeof resetsAt === 'number' && Number.isFinite(resetsAt) && resetsAt > 0) {
+        resetAtMs = resetsAt > 10_000_000_000 ? Math.trunc(resetsAt) : Math.trunc(resetsAt * 1000);
+    }
+
+    return {
+        usedPercent,
+        remainingPercent: clampPercent(100 - usedPercent),
+        resetAtMs,
+        windowSeconds,
+    };
+}
+
+/**
+ * Parse the Claude subscription usage response
+ * (`five_hour` / `seven_day` objects with `utilization` in percent and an
+ * ISO-8601 `resets_at`).
+ */
+export function parseClaudeUsageResponse(
+    value: unknown,
+    plan: string | null = null,
+    fetchedAtMs = Date.now(),
+): UsageSnapshot {
+    if (!isRecord(value))
+        throw new Error('Usage response is not a JSON object.');
+
+    const fiveHour = parseClaudeWindow(value.five_hour, CLAUDE_FIVE_HOUR_SECONDS);
+    const weekly = parseClaudeWindow(value.seven_day, CLAUDE_WEEKLY_SECONDS);
+
+    if (fiveHour === null && weekly === null)
+        throw new Error('Usage response contains no usable rate-limit window.');
+
+    return {
+        fiveHour,
+        weekly,
+        plan: plan !== null && plan.trim() ? plan.trim() : null,
+        resetCreditsAvailable: null,
+        planActiveUntilMs: null,
+        willRenew: null,
+        fetchedAtMs,
+    };
+}
+
 function windowShowsConsumption(previous: UsageWindow | null, next: UsageWindow | null): boolean {
     if (previous === null || next === null)
         return false;
@@ -176,18 +235,19 @@ export function progressScale(remainingPercent: number): number {
     return Math.max(0, Math.min(1, remainingPercent / 100));
 }
 
-export function formatPanel(snapshot: UsageSnapshot | null): string {
+export function formatPanel(snapshot: UsageSnapshot | null, prefix: string | null = null): string {
+    const lead = prefix === null ? '' : `${prefix} `;
     if (snapshot === null)
-        return '5h -- · W --';
+        return `${lead}5h -- · W --`;
 
     const five = snapshot.fiveHour === null ? '--' : `${Math.round(snapshot.fiveHour.remainingPercent)}%`;
     const weekly = snapshot.weekly === null ? '--' : `${Math.round(snapshot.weekly.remainingPercent)}%`;
 
     if (snapshot.fiveHour === null && snapshot.weekly !== null)
-        return `W ${weekly}`;
+        return `${lead}W ${weekly}`;
     if (snapshot.weekly === null && snapshot.fiveHour !== null)
-        return `5h ${five}`;
-    return `5h ${five} · W ${weekly}`;
+        return `${lead}5h ${five}`;
+    return `${lead}5h ${five} · W ${weekly}`;
 }
 
 export function formatReset(resetAtMs: number | null, nowMs = Date.now()): string {

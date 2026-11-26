@@ -1,6 +1,6 @@
 {
-  "name": "ChatGPT Usage",
-  "description": "Shows ChatGPT short-term and weekly usage limits in the GNOME panel.",
+  "name": "AI Usage",
+  "description": "Shows ChatGPT and Claude short-term and weekly subscription usage limits in the GNOME panel.",
   "uuid": "chatgpt-usage@samasama99",
   "url": "https://github.com/samasama99/chatgpt-usage-gnome",
   "shell-version": [

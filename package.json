@@ -1,9 +1,9 @@
 {
   "name": "chatgpt-usage-gnome",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
-  "description": "Polished GNOME Shell usage monitor for ChatGPT/Codex",
+  "description": "GNOME Shell subscription usage monitor for ChatGPT/Codex and Claude",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/samasama99/chatgpt-usage-gnome.git"

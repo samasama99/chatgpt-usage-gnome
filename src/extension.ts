@@ -7,18 +7,25 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import {ModelActivityScanner} from './activity.js';
+import {createUsageSource} from './api.js';
+import {hasClaudeLogin, hasCodexLogin} from './auth.js';
 import {UsagePoller} from './poller.js';
 import {
+    DEFAULT_PANEL_BACKGROUND_COLOR,
     normalizePanelColor,
     normalizePanelPosition,
+    normalizeProviderSetting,
+    resolveProviders,
     type IndicatorPreferences,
     type PanelPosition,
+    type ProviderId,
 } from './settings-model.js';
 import {UsageIndicator} from './ui.js';
 
-export default class ChatGPTUsageExtension extends Extension {
+export default class AIUsageExtension extends Extension {
     private indicator: UsageIndicator | null = null;
-    private poller: UsagePoller | null = null;
+    private pollers: UsagePoller[] = [];
+    private providers: readonly ProviderId[] = [];
     private activityScanner: ModelActivityScanner | null = null;
     private settings: Gio.Settings | null = null;
     private settingsSignalId = 0;
@@ -26,19 +33,55 @@ export default class ChatGPTUsageExtension extends Extension {
 
     override enable(): void {
         this.settings = this.getSettings();
-        const preferences = this.readPreferences();
-
-        this.poller = new UsagePoller(state => this.indicator?.update(state));
         this.activityScanner = new ModelActivityScanner();
+
+        this.settingsSignalId = this.settings.connect(
+            'changed',
+            (_settings, key: string) => this.onSettingChanged(key),
+        );
+
+        this.subscribeToResume();
+        this.build();
+    }
+
+    override disable(): void {
+        this.unsubscribeFromResume();
+
+        if (this.settings !== null && this.settingsSignalId !== 0) {
+            this.settings.disconnect(this.settingsSignalId);
+            this.settingsSignalId = 0;
+        }
+
+        this.teardown();
+        this.settings = null;
+
+        this.activityScanner?.clear();
+        this.activityScanner = null;
+    }
+
+    private resolveProviders(): readonly ProviderId[] {
+        const setting = normalizeProviderSetting(this.settings?.get_string('providers') ?? 'auto');
+        return resolveProviders(setting, {
+            chatgpt: hasCodexLogin(),
+            claude: hasClaudeLogin(),
+        });
+    }
+
+    /** Create the indicator and one poller per shown provider. */
+    private build(): void {
+        const preferences = this.readPreferences();
+        this.providers = this.resolveProviders();
+
         this.indicator = new UsageIndicator(
-            GLib.build_filenamev([this.path, 'chatgpt-symbolic.svg']),
+            GLib.build_filenamev([this.path, 'usage-symbolic.svg']),
+            this.providers,
             preferences,
-            () => this.poller?.refreshIfStale(),
-            () => this.poller?.forceRefresh(),
+            () => this.pollers.forEach(poller => poller.refreshIfStale()),
+            () => this.pollers.forEach(poller => poller.forceRefresh()),
             () => {
                 if (!this.settings?.get_boolean('show-local-activity'))
                     return Promise.reject(new Error('Local activity is disabled.'));
-                return this.activityScanner?.scan() ??
+                return this.activityScanner?.scan(this.providers) ??
                     Promise.reject(new Error('Activity scanner unavailable.'));
             },
             () => this.openPreferences(),
@@ -52,29 +95,16 @@ export default class ChatGPTUsageExtension extends Extension {
         );
         this.moveIndicator(preferences.panelPosition);
 
-        this.settingsSignalId = this.settings.connect(
-            'changed',
-            (_settings, key: string) => this.onSettingChanged(key),
-        );
-
-        this.subscribeToResume();
-        this.poller.start();
+        this.pollers = this.providers.map(provider => new UsagePoller(
+            createUsageSource(provider),
+            state => this.indicator?.update(state),
+        ));
+        this.pollers.forEach(poller => poller.start());
     }
 
-    override disable(): void {
-        this.unsubscribeFromResume();
-
-        if (this.settings !== null && this.settingsSignalId !== 0) {
-            this.settings.disconnect(this.settingsSignalId);
-            this.settingsSignalId = 0;
-        }
-        this.settings = null;
-
-        this.poller?.stop();
-        this.poller = null;
-
-        this.activityScanner?.clear();
-        this.activityScanner = null;
+    private teardown(): void {
+        this.pollers.forEach(poller => poller.stop());
+        this.pollers = [];
 
         this.indicator?.destroy();
         this.indicator = null;
@@ -88,7 +118,7 @@ export default class ChatGPTUsageExtension extends Extension {
                 showLocalActivity: true,
                 panelPosition: 'right',
                 panelBackgroundEnabled: false,
-                panelBackgroundColor: '#10a37f',
+                panelBackgroundColor: DEFAULT_PANEL_BACKGROUND_COLOR,
             };
         }
 
@@ -104,6 +134,13 @@ export default class ChatGPTUsageExtension extends Extension {
     }
 
     private onSettingChanged(key: string): void {
+        if (key === 'providers') {
+            this.activityScanner?.clear();
+            this.teardown();
+            this.build();
+            return;
+        }
+
         if (key === 'show-local-activity' &&
             !this.settings?.get_boolean('show-local-activity')) {
             this.activityScanner?.clear();
@@ -168,7 +205,7 @@ export default class ChatGPTUsageExtension extends Extension {
             (_connection, _sender, _path, _interface, _signal, parameters) => {
                 const [preparingForSleep] = parameters.deepUnpack() as [boolean];
                 if (!preparingForSleep)
-                    this.poller?.refreshAfterResume();
+                    this.pollers.forEach(poller => poller.refreshAfterResume());
             },
         );
     }

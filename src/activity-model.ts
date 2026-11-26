@@ -26,6 +26,8 @@ export interface ModelActivitySnapshot {
 }
 
 export interface TokenRecord extends TokenBreakdown {
+    /** Optional stable message ID used to de-duplicate repeated log lines. */
+    readonly id?: string;
     readonly timestampMs: number;
     readonly model: string;
     readonly tokens: number;
@@ -52,7 +54,29 @@ const API_PRICES = new Map<string, ApiPrice>([
     ['gpt-5.6-terra', {input: 2, cachedInput: 0.2, cacheWrite: 2.5, output: 12}],
     ['gpt-5.6-luna', {input: 0.2, cachedInput: 0.02, cacheWrite: 0.25, output: 1.2}],
     ['gpt-5.5', {input: 5, cachedInput: 0.5, cacheWrite: 6.25, output: 30}],
+    // Claude standard API prices, reviewed 2026-11-26. Cache writes use the
+    // 5-minute rate (1.25x input); the 1-hour cache-write premium is excluded.
+    ['claude-fable-5-2', {input: 8, cachedInput: 0.2, cacheWrite: 10, output: 40}],
+    ['claude-opus-5-5', {input: 4, cachedInput: 0.2, cacheWrite: 5, output: 20}],
+    ['claude-opus-5', {input: 5, cachedInput: 0.5, cacheWrite: 6.25, output: 25}],
+    ['claude-opus-4-8', {input: 5, cachedInput: 0.5, cacheWrite: 6.25, output: 25}],
+    ['claude-opus-4-7', {input: 5, cachedInput: 0.5, cacheWrite: 6.25, output: 25}],
+    ['claude-opus-4-6', {input: 5, cachedInput: 0.5, cacheWrite: 6.25, output: 25}],
+    ['claude-sonnet-5-5', {input: 2, cachedInput: 0.1, cacheWrite: 2.5, output: 10}],
+    ['claude-sonnet-5', {input: 2, cachedInput: 0.2, cacheWrite: 2.5, output: 10}],
+    ['claude-sonnet-4-6', {input: 3, cachedInput: 0.3, cacheWrite: 3.75, output: 15}],
+    ['claude-haiku-5-5', {input: 0.1, cachedInput: 0.01, cacheWrite: 0.125, output: 0.5}],
+    ['claude-haiku-4-5', {input: 1, cachedInput: 0.1, cacheWrite: 1.25, output: 5}],
 ]);
+
+/** Lowercase a model ID and drop date snapshots / context-size suffixes. */
+export function normalizeModelId(model: string): string {
+    return model
+        .trim()
+        .toLowerCase()
+        .replace(/\[[^\]]*\]$/, '')
+        .replace(/-\d{8}$/, '');
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -144,7 +168,7 @@ export function estimateApiEquivalentCost(
     model: string,
     usage: TokenBreakdown,
 ): number | null {
-    const price = API_PRICES.get(model.toLowerCase());
+    const price = API_PRICES.get(normalizeModelId(model));
     if (!price)
         return null;
 
@@ -215,6 +239,74 @@ export function parseCodexRollout(text: string): readonly TokenRecord[] {
     });
 }
 
+function claudeBreakdown(usage: Record<string, unknown>): TokenBreakdown {
+    const input = nonNegativeInt(usage.input_tokens);
+    const cached = nonNegativeInt(usage.cache_read_input_tokens);
+    const cacheWrite = nonNegativeInt(usage.cache_creation_input_tokens);
+    const output = nonNegativeInt(usage.output_tokens);
+
+    return {
+        uncachedInputTokens: input,
+        cachedInputTokens: cached,
+        cacheWriteInputTokens: cacheWrite,
+        outputTokens: output,
+        totalTokens: input + cached + cacheWrite + output,
+    };
+}
+
+/**
+ * Extract per-message token usage from a Claude Code session JSONL file.
+ * Claude Code writes one line per content block, repeating the message's
+ * usage, so records are de-duplicated by message ID (last line wins).
+ */
+export function parseClaudeCodeSession(text: string): readonly TokenRecord[] {
+    const byId = new Map<string, TokenRecord>();
+    const anonymous: TokenRecord[] = [];
+
+    for (const rawLine of text.split('\n')) {
+        if (!rawLine.trim())
+            continue;
+
+        let value: unknown;
+        try {
+            value = JSON.parse(rawLine) as unknown;
+        } catch {
+            continue;
+        }
+
+        if (!isRecord(value) || value.type !== 'assistant' || !isRecord(value.message))
+            continue;
+
+        const message = value.message;
+        const model = message.model;
+        const usage = message.usage;
+        const timestampMs = lineTimestampMs(value);
+        if (typeof model !== 'string' || !model || model.startsWith('<') ||
+            !isRecord(usage) || timestampMs === null)
+            continue;
+
+        const breakdown = claudeBreakdown(usage);
+        if (breakdown.totalTokens <= 0)
+            continue;
+
+        const id = typeof message.id === 'string' && message.id ? message.id : null;
+        const record: TokenRecord = {
+            ...(id === null ? {} : {id}),
+            timestampMs,
+            model: normalizeModelId(model),
+            tokens: breakdown.totalTokens,
+            ...breakdown,
+        };
+
+        if (id === null)
+            anonymous.push(record);
+        else
+            byId.set(id, record);
+    }
+
+    return [...byId.values(), ...anonymous];
+}
+
 function activitiesFromTotals(
     totals: ReadonlyMap<string, TokenBreakdown>,
     totalTokens: number,
@@ -250,6 +342,7 @@ export function summarizeModelActivity(
     records: readonly TokenRecord[],
     nowMs = Date.now(),
     windowDays = 7,
+    source = 'Codex',
 ): ModelActivitySnapshot {
     const cutoffMs = nowMs - windowDays * DAY_MS;
     const totals = new Map<string, TokenBreakdown>();
@@ -275,7 +368,7 @@ export function summarizeModelActivity(
         totalTokens,
         scannedAtMs: nowMs,
         windowDays,
-        sources: totalTokens > 0 ? ['Codex'] : [],
+        sources: totalTokens > 0 ? [source] : [],
         ...pricingSummary(models),
     };
 }
@@ -382,14 +475,71 @@ export function parseOpenCodeStats(text: string): ReadonlyMap<string, number> {
     );
 }
 
+function snapshotFromTotals(
+    totals: ReadonlyMap<string, TokenBreakdown>,
+    scannedAtMs: number,
+    windowDays: number,
+    sources: readonly string[],
+): ModelActivitySnapshot {
+    const totalTokens = [...totals.values()]
+        .reduce((sum, usage) => sum + usage.totalTokens, 0);
+    const models = activitiesFromTotals(totals, totalTokens);
+
+    return {
+        models,
+        totalTokens,
+        scannedAtMs,
+        windowDays,
+        sources,
+        ...pricingSummary(models),
+    };
+}
+
+function totalsOf(snapshot: ModelActivitySnapshot): Map<string, TokenBreakdown> {
+    const totals = new Map<string, TokenBreakdown>();
+    for (const row of snapshot.models) {
+        totals.set(
+            row.model,
+            addBreakdown(totals.get(row.model) ?? emptyBreakdown(), normalizeBreakdown(row)),
+        );
+    }
+    return totals;
+}
+
+/** Combine several local activity snapshots that cover the same window. */
+export function combineModelActivity(
+    snapshots: readonly ModelActivitySnapshot[],
+    nowMs = Date.now(),
+    windowDays = 7,
+): ModelActivitySnapshot {
+    const totals = new Map<string, TokenBreakdown>();
+    const sources: string[] = [];
+
+    for (const snapshot of snapshots) {
+        for (const [model, usage] of totalsOf(snapshot))
+            totals.set(model, addBreakdown(totals.get(model) ?? emptyBreakdown(), usage));
+        for (const source of snapshot.sources) {
+            if (!sources.includes(source))
+                sources.push(source);
+        }
+    }
+
+    return snapshotFromTotals(totals, nowMs, windowDays, sources);
+}
+
+export const OPENCODE_CHATGPT_PROVIDERS: readonly string[] = ['openai', 'chatgpt'];
+export const OPENCODE_CLAUDE_PROVIDERS: readonly string[] = ['anthropic', 'claude'];
+
+/**
+ * Merge OpenCode model totals into a local snapshot, keeping only models from
+ * the given OpenCode provider prefixes (e.g. `openai/…`, `anthropic/…`).
+ */
 export function mergeModelActivity(
     codex: ModelActivitySnapshot,
     openCodeTotals: ReadonlyMap<string, TokenBreakdown | number>,
+    allowedProviders: readonly string[] = OPENCODE_CHATGPT_PROVIDERS,
 ): ModelActivitySnapshot {
-    const totals = new Map<string, TokenBreakdown>();
-
-    for (const row of codex.models)
-        totals.set(row.model, normalizeBreakdown(row));
+    const totals = totalsOf(codex);
 
     let openCodeTokens = 0;
     for (const [qualifiedModel, rawUsage] of openCodeTotals) {
@@ -397,7 +547,7 @@ export function mergeModelActivity(
         const provider = slash >= 0 ? qualifiedModel.slice(0, slash).toLowerCase() : '';
         const model = slash >= 0 ? qualifiedModel.slice(slash + 1) : qualifiedModel;
 
-        if (provider && provider !== 'openai' && provider !== 'chatgpt')
+        if (provider && !allowedProviders.includes(provider))
             continue;
 
         const usage = typeof rawUsage === 'number'
@@ -406,25 +556,20 @@ export function mergeModelActivity(
         if (usage.totalTokens <= 0)
             continue;
 
+        const key = normalizeModelId(model);
         totals.set(
-            model,
-            addBreakdown(totals.get(model) ?? emptyBreakdown(), usage),
+            key,
+            addBreakdown(totals.get(key) ?? emptyBreakdown(), usage),
         );
         openCodeTokens += usage.totalTokens;
     }
 
-    const totalTokens = [...totals.values()]
-        .reduce((sum, usage) => sum + usage.totalTokens, 0);
-    const models = activitiesFromTotals(totals, totalTokens);
-
-    return {
-        models,
-        totalTokens,
-        scannedAtMs: codex.scannedAtMs,
-        windowDays: codex.windowDays,
-        sources: openCodeTokens > 0 ? [...codex.sources, 'OpenCode'] : codex.sources,
-        ...pricingSummary(models),
-    };
+    return snapshotFromTotals(
+        totals,
+        codex.scannedAtMs,
+        codex.windowDays,
+        openCodeTokens > 0 ? [...codex.sources, 'OpenCode'] : codex.sources,
+    );
 }
 
 export function compactModelActivity(
@@ -480,6 +625,13 @@ export function formatUsd(value: number): string {
 export function displayModelName(model: string): string {
     if (model === 'Other')
         return model;
+
+    const claude = normalizeModelId(model).match(/^claude-([a-z]+)-(\d+)(?:-(\d+))?$/);
+    if (claude) {
+        const family = claude[1] ?? '';
+        const version = claude[3] === undefined ? claude[2] : `${claude[2]}.${claude[3]}`;
+        return `Claude ${family.charAt(0).toUpperCase()}${family.slice(1)} ${version}`;
+    }
 
     return model
         .replace(/^gpt-/i, 'GPT-')

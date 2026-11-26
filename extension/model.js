@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 const WEEKLY_THRESHOLD_SECONDS = 2 * 24 * 60 * 60;
 const CONSUMPTION_EPSILON = 0.0001;
-
 function isRecord(value) {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -23,11 +22,9 @@ function parseResetAtMs(record) {
     const resetMs = firstFiniteNumber(record, ['reset_time_ms', 'resetAtMs']);
     if (resetMs !== null && resetMs > 0)
         return Math.trunc(resetMs);
-
     const resetAt = record.reset_at ?? record.resetAt;
     if (typeof resetAt === 'number' && Number.isFinite(resetAt) && resetAt > 0)
         return resetAt > 10_000_000_000 ? Math.trunc(resetAt) : Math.trunc(resetAt * 1000);
-
     if (typeof resetAt === 'string') {
         const parsed = Date.parse(resetAt);
         if (Number.isFinite(parsed))
@@ -38,16 +35,13 @@ function parseResetAtMs(record) {
 function parseWindow(sourceKey, value) {
     if (!isRecord(value))
         return null;
-
     const used = firstFiniteNumber(value, ['used_percent', 'usedPercent']);
     const left = firstFiniteNumber(value, ['percent_left', 'remaining_percent', 'remainingPercent']);
     if (used === null && left === null)
         return null;
-
     const usedPercent = clampPercent(used ?? (100 - (left ?? 0)));
     const remainingPercent = clampPercent(left ?? (100 - usedPercent));
     const windowSeconds = firstFiniteNumber(value, ['limit_window_seconds', 'window_seconds', 'windowSeconds']);
-
     return {
         sourceKey,
         usedPercent,
@@ -83,14 +77,11 @@ function collectWindows(rateLimit) {
 export function parseUsageResponse(value, fetchedAtMs = Date.now()) {
     if (!isRecord(value))
         throw new Error('Usage response is not a JSON object.');
-
     const rateLimitValue = value.rate_limit ?? value.rate_limits;
     if (!isRecord(rateLimitValue))
         throw new Error('Usage response has no rate-limit object.');
-
     let fiveHour = null;
     let weekly = null;
-
     for (const window of collectWindows(rateLimitValue)) {
         const kind = classifyWindow(window);
         if (kind === 'fiveHour' && fiveHour === null)
@@ -98,18 +89,14 @@ export function parseUsageResponse(value, fetchedAtMs = Date.now()) {
         else if (kind === 'weekly' && weekly === null)
             weekly = window;
     }
-
     if (fiveHour === null && weekly === null)
         throw new Error('Usage response contains no usable rate-limit window.');
-
     const planValue = value.plan_type ?? value.plan;
     const plan = typeof planValue === 'string' && planValue.trim() ? planValue.trim() : null;
-
     const resetCreditsValue = value.rate_limit_reset_credits;
     const resetCreditsAvailable = isRecord(resetCreditsValue)
         ? finiteNumber(resetCreditsValue.available_count)
         : null;
-
     return {
         fiveHour,
         weekly,
@@ -122,9 +109,57 @@ export function parseUsageResponse(value, fetchedAtMs = Date.now()) {
         fetchedAtMs,
     };
 }
+const CLAUDE_FIVE_HOUR_SECONDS = 5 * 60 * 60;
+const CLAUDE_WEEKLY_SECONDS = 7 * 24 * 60 * 60;
+function parseClaudeWindow(value, windowSeconds) {
+    if (!isRecord(value))
+        return null;
+    const utilization = firstFiniteNumber(value, ['utilization', 'used_percent']);
+    if (utilization === null)
+        return null;
+    const usedPercent = clampPercent(utilization);
+    let resetAtMs = null;
+    const resetsAt = value.resets_at ?? value.resetsAt;
+    if (typeof resetsAt === 'string') {
+        const parsed = Date.parse(resetsAt);
+        resetAtMs = Number.isFinite(parsed) ? parsed : null;
+    }
+    else if (typeof resetsAt === 'number' && Number.isFinite(resetsAt) && resetsAt > 0) {
+        resetAtMs = resetsAt > 10_000_000_000 ? Math.trunc(resetsAt) : Math.trunc(resetsAt * 1000);
+    }
+    return {
+        usedPercent,
+        remainingPercent: clampPercent(100 - usedPercent),
+        resetAtMs,
+        windowSeconds,
+    };
+}
+/**
+ * Parse the Claude subscription usage response
+ * (`five_hour` / `seven_day` objects with `utilization` in percent and an
+ * ISO-8601 `resets_at`).
+ */
+export function parseClaudeUsageResponse(value, plan = null, fetchedAtMs = Date.now()) {
+    if (!isRecord(value))
+        throw new Error('Usage response is not a JSON object.');
+    const fiveHour = parseClaudeWindow(value.five_hour, CLAUDE_FIVE_HOUR_SECONDS);
+    const weekly = parseClaudeWindow(value.seven_day, CLAUDE_WEEKLY_SECONDS);
+    if (fiveHour === null && weekly === null)
+        throw new Error('Usage response contains no usable rate-limit window.');
+    return {
+        fiveHour,
+        weekly,
+        plan: plan !== null && plan.trim() ? plan.trim() : null,
+        resetCreditsAvailable: null,
+        planActiveUntilMs: null,
+        willRenew: null,
+        fetchedAtMs,
+    };
+}
 function windowShowsConsumption(previous, next) {
-    return previous !== null && next !== null &&
-        next.usedPercent > previous.usedPercent + CONSUMPTION_EPSILON;
+    if (previous === null || next === null)
+        return false;
+    return next.usedPercent > previous.usedPercent + CONSUMPTION_EPSILON;
 }
 export function detectedConsumption(previous, next) {
     if (previous === null)
@@ -137,33 +172,28 @@ export function progressScale(remainingPercent) {
         return 0;
     return Math.max(0, Math.min(1, remainingPercent / 100));
 }
-
-export function formatPanel(snapshot) {
+export function formatPanel(snapshot, prefix = null) {
+    const lead = prefix === null ? '' : `${prefix} `;
     if (snapshot === null)
-        return '5h -- · W --';
-
+        return `${lead}5h -- · W --`;
     const five = snapshot.fiveHour === null ? '--' : `${Math.round(snapshot.fiveHour.remainingPercent)}%`;
     const weekly = snapshot.weekly === null ? '--' : `${Math.round(snapshot.weekly.remainingPercent)}%`;
-
     if (snapshot.fiveHour === null && snapshot.weekly !== null)
-        return `W ${weekly}`;
+        return `${lead}W ${weekly}`;
     if (snapshot.weekly === null && snapshot.fiveHour !== null)
-        return `5h ${five}`;
-    return `5h ${five} · W ${weekly}`;
+        return `${lead}5h ${five}`;
+    return `${lead}5h ${five} · W ${weekly}`;
 }
 export function formatReset(resetAtMs, nowMs = Date.now()) {
     if (resetAtMs === null)
         return 'Reset time unavailable';
-
     const deltaMs = resetAtMs - nowMs;
     if (deltaMs <= 0)
         return 'Resetting now';
-
     const totalMinutes = Math.ceil(deltaMs / 60_000);
     const days = Math.floor(totalMinutes / (24 * 60));
     const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
     const minutes = totalMinutes % 60;
-
     if (days > 0)
         return `Resets in ${days}d ${hours}h`;
     if (hours > 0)
@@ -173,35 +203,27 @@ export function formatReset(resetAtMs, nowMs = Date.now()) {
 export function formatAge(timestampMs, nowMs = Date.now()) {
     if (timestampMs === null)
         return 'Not updated yet';
-
     const seconds = Math.max(0, Math.floor((nowMs - timestampMs) / 1000));
     if (seconds < 10)
         return 'Updated just now';
     if (seconds < 60)
         return `Updated ${seconds}s ago`;
-
     const minutes = Math.floor(seconds / 60);
     if (minutes < 60)
         return `Updated ${minutes}m ago`;
     return `Updated ${Math.floor(minutes / 60)}h ago`;
 }
-
-
 export function parseResetCreditsResponse(value) {
     if (!isRecord(value))
         return null;
-
     const count = finiteNumber(value.available_count ?? value.availableCount);
     return count === null ? null : Math.max(0, Math.trunc(count));
 }
-
 export function parseSubscriptionResponse(value) {
     if (!isRecord(value))
         return null;
-
     const candidate = isRecord(value.data) ? value.data : value;
     const activeUntil = candidate.active_until ?? candidate.activeUntil;
-
     let activeUntilMs = Number.NaN;
     if (typeof activeUntil === 'string')
         activeUntilMs = Date.parse(activeUntil);
@@ -209,10 +231,8 @@ export function parseSubscriptionResponse(value) {
         activeUntilMs = activeUntil > 10_000_000_000
             ? activeUntil
             : activeUntil * 1000;
-
     if (!Number.isFinite(activeUntilMs))
         return null;
-
     const renewValue = candidate.will_renew ?? candidate.willRenew;
     return {
         activeUntilMs: Math.trunc(activeUntilMs),

@@ -2,13 +2,17 @@
 <schemalist>
   <schema id="org.gnome.shell.extensions.chatgpt-usage"
           path="/org/gnome/shell/extensions/chatgpt-usage/">
+    <key name="providers" type="s">
+      <default>'auto'</default>
+      <summary>Which subscriptions to show: auto, chatgpt, claude, or both</summary>
+    </key>
     <key name="show-panel-icon" type="b">
       <default>true</default>
-      <summary>Show the ChatGPT icon in the panel</summary>
+      <summary>Show the usage icon in the panel</summary>
     </key>
     <key name="show-local-activity" type="b">
       <default>true</default>
-      <summary>Show local Codex and OpenCode activity</summary>
+      <summary>Show local Codex, Claude Code, and OpenCode activity</summary>
     </key>
     <key name="panel-position" type="s">
       <default>'right'</default>
@@ -19,7 +23,7 @@
       <summary>Show a colored background behind the panel indicator</summary>
     </key>
     <key name="panel-background-color" type="s">
-      <default>'#10a37f'</default>
+      <default>'#3584e4'</default>
       <summary>Panel indicator background color</summary>
     </key>
   </schema>

@@ -18,7 +18,12 @@ import {
 import type {FetchFailure} from './api.js';
 import {formatAge, formatPanel, formatReset, progressScale, type UsageSnapshot, type UsageWindow} from './model.js';
 import type {PollerState} from './poller.js';
-import type {IndicatorPreferences} from './settings-model.js';
+import {
+    PROVIDER_NAMES,
+    PROVIDER_SHORT_NAMES,
+    type IndicatorPreferences,
+    type ProviderId,
+} from './settings-model.js';
 
 const VERTICAL_PROPS = 'orientation' in St.BoxLayout.prototype
     ? {orientation: Clutter.Orientation.VERTICAL}
@@ -39,7 +44,7 @@ class ProgressBar {
 
     constructor() {
         this.fill = new St.Widget({
-            style_class: 'chatgpt-progress-fill',
+            style_class: 'usage-progress-fill',
             x_expand: true,
             x_align: Clutter.ActorAlign.FILL,
             height: 5,
@@ -47,7 +52,7 @@ class ProgressBar {
         this.fill.set_pivot_point(0, 0.5);
 
         this.actor = new St.Bin({
-            style_class: 'chatgpt-progress-track',
+            style_class: 'usage-progress-track',
             x_expand: true,
             x_align: Clutter.ActorAlign.FILL,
             height: 5,
@@ -65,11 +70,11 @@ class ProgressBar {
         this.fill.scale_x = progressScale(percent);
 
         if (percent <= 10)
-            this.fill.set_style_class_name('chatgpt-progress-fill chatgpt-progress-critical');
+            this.fill.set_style_class_name('usage-progress-fill usage-progress-critical');
         else if (percent <= 25)
-            this.fill.set_style_class_name('chatgpt-progress-fill chatgpt-progress-warning');
+            this.fill.set_style_class_name('usage-progress-fill usage-progress-warning');
         else
-            this.fill.set_style_class_name('chatgpt-progress-fill');
+            this.fill.set_style_class_name('usage-progress-fill');
     }
 }
 
@@ -82,26 +87,26 @@ class UsageRow {
     constructor(name: string) {
         this.actor = new St.BoxLayout({
             ...VERTICAL_PROPS,
-            style_class: 'chatgpt-usage-card',
+            style_class: 'usage-usage-card',
             x_expand: true,
         } as never);
 
         const header = new St.BoxLayout({
             ...HORIZONTAL_PROPS,
-            style_class: 'chatgpt-usage-header',
+            style_class: 'usage-usage-header',
             x_expand: true,
         } as never);
 
         const title = new St.Label({
             text: name,
-            style_class: 'chatgpt-usage-title',
+            style_class: 'usage-usage-title',
             x_expand: true,
             x_align: Clutter.ActorAlign.START,
             y_align: Clutter.ActorAlign.CENTER,
         });
         this.value = new St.Label({
             text: '--',
-            style_class: 'chatgpt-usage-value',
+            style_class: 'usage-usage-value',
             x_align: Clutter.ActorAlign.END,
             y_align: Clutter.ActorAlign.CENTER,
         });
@@ -112,7 +117,7 @@ class UsageRow {
         this.progress = new ProgressBar();
         this.reset = new St.Label({
             text: '',
-            style_class: 'chatgpt-reset',
+            style_class: 'usage-reset',
         });
 
         this.actor.add_child(header);
@@ -143,36 +148,36 @@ class ModelActivitySection {
     constructor() {
         this.actor = new St.BoxLayout({
             ...VERTICAL_PROPS,
-            style_class: 'chatgpt-activity',
+            style_class: 'usage-activity',
             x_expand: true,
         } as never);
 
         const heading = new St.BoxLayout({
             ...HORIZONTAL_PROPS,
-            style_class: 'chatgpt-activity-heading',
+            style_class: 'usage-activity-heading',
             x_expand: true,
         } as never);
         heading.add_child(new St.Label({
             text: 'Local model activity',
-            style_class: 'chatgpt-activity-title',
+            style_class: 'usage-activity-title',
             x_expand: true,
         }));
         this.subtitle = new St.Label({
             text: 'Local · last 7 days',
-            style_class: 'chatgpt-activity-subtitle',
+            style_class: 'usage-activity-subtitle',
             x_align: Clutter.ActorAlign.END,
         });
         heading.add_child(this.subtitle);
 
         this.rows = new St.BoxLayout({
             ...VERTICAL_PROPS,
-            style_class: 'chatgpt-activity-rows',
+            style_class: 'usage-activity-rows',
             x_expand: true,
         } as never);
 
         this.costLabel = new St.Label({
             text: '',
-            style_class: 'chatgpt-activity-subtitle',
+            style_class: 'usage-activity-subtitle',
         });
 
         this.actor.add_child(heading);
@@ -186,7 +191,7 @@ class ModelActivitySection {
         this.costLabel.visible = false;
         this.rows.add_child(new St.Label({
             text: 'Reading local model activity…',
-            style_class: 'chatgpt-activity-empty',
+            style_class: 'usage-activity-empty',
         }));
     }
 
@@ -195,7 +200,7 @@ class ModelActivitySection {
         this.costLabel.visible = false;
         this.rows.add_child(new St.Label({
             text: 'Local model activity unavailable',
-            style_class: 'chatgpt-activity-empty',
+            style_class: 'usage-activity-empty',
         }));
     }
 
@@ -221,7 +226,7 @@ class ModelActivitySection {
         if (rows.length === 0) {
             this.rows.add_child(new St.Label({
                 text: 'No recent local model activity found',
-                style_class: 'chatgpt-activity-empty',
+                style_class: 'usage-activity-empty',
             }));
             return;
         }
@@ -229,20 +234,20 @@ class ModelActivitySection {
         for (const row of rows) {
             const actor = new St.BoxLayout({
                 ...HORIZONTAL_PROPS,
-                style_class: 'chatgpt-activity-row',
+                style_class: 'usage-activity-row',
                 x_expand: true,
             } as never);
 
             actor.add_child(new St.Label({
                 text: displayModelName(row.model),
-                style_class: 'chatgpt-activity-model',
+                style_class: 'usage-activity-model',
                 x_expand: true,
                 x_align: Clutter.ActorAlign.START,
             }));
 
             actor.add_child(new St.Label({
                 text: `${Math.round(row.sharePercent)}% · ${formatTokenCount(row.tokens)}`,
-                style_class: 'chatgpt-activity-value',
+                style_class: 'usage-activity-value',
                 x_align: Clutter.ActorAlign.END,
             }));
 
@@ -280,19 +285,110 @@ function displayPlan(plan: string | null): string {
     return `${plan.charAt(0).toUpperCase() + plan.slice(1)} plan`;
 }
 
+function billingText(snapshot: UsageSnapshot | null): string {
+    const activeUntil = snapshot?.planActiveUntilMs ?? null;
+    if (activeUntil === null)
+        return '';
+
+    const formatted = new Date(activeUntil).toLocaleDateString(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+    });
+    if (snapshot?.willRenew === true)
+        return `Next billing · ${formatted}`;
+    if (snapshot?.willRenew === false)
+        return `Plan active until · ${formatted}`;
+    return `Subscription date · ${formatted}`;
+}
+
+/** Usage cards and metadata for one provider (ChatGPT or Claude). */
+class ProviderSection {
+    readonly actor: St.BoxLayout;
+    private readonly planLabel: St.Label;
+    private readonly metaLabel: St.Label;
+    private readonly fiveHourRow: UsageRow;
+    private readonly weeklyRow: UsageRow;
+    private readonly errorLabel: St.Label;
+
+    constructor(provider: ProviderId) {
+        this.actor = new St.BoxLayout({
+            ...VERTICAL_PROPS,
+            style_class: 'usage-provider',
+            x_expand: true,
+        } as never);
+
+        const heading = new St.BoxLayout({
+            ...HORIZONTAL_PROPS,
+            style_class: 'usage-provider-heading',
+            x_expand: true,
+        } as never);
+        heading.add_child(new St.Label({
+            text: PROVIDER_NAMES[provider],
+            style_class: 'usage-provider-title',
+            x_expand: true,
+            y_align: Clutter.ActorAlign.CENTER,
+        }));
+        this.planLabel = new St.Label({
+            text: '',
+            style_class: 'usage-plan',
+            x_align: Clutter.ActorAlign.END,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        heading.add_child(this.planLabel);
+
+        this.metaLabel = new St.Label({
+            text: '',
+            style_class: 'usage-plan',
+        });
+
+        this.fiveHourRow = new UsageRow('5-hour');
+        this.weeklyRow = new UsageRow('Weekly');
+
+        this.errorLabel = new St.Label({
+            text: '',
+            style_class: 'usage-error',
+        });
+        this.errorLabel.clutter_text.line_wrap = true;
+
+        this.actor.add_child(heading);
+        this.actor.add_child(this.metaLabel);
+        this.actor.add_child(this.fiveHourRow.actor);
+        this.actor.add_child(this.weeklyRow.actor);
+        this.actor.add_child(this.errorLabel);
+    }
+
+    update(state: PollerState | null, nowMs: number): void {
+        const snapshot = state?.usage ?? null;
+
+        this.planLabel.text = displayPlan(snapshot?.plan ?? null);
+        this.planLabel.visible = this.planLabel.text.length > 0;
+
+        const resetCredits = snapshot?.resetCreditsAvailable ?? null;
+        const meta = [
+            resetCredits === null ? '' : `Reset credits · ${resetCredits}`,
+            billingText(snapshot),
+        ].filter(text => text.length > 0);
+        this.metaLabel.text = meta.join('  ·  ');
+        this.metaLabel.visible = meta.length > 0;
+
+        this.fiveHourRow.update(snapshot?.fiveHour ?? null, nowMs);
+        this.weeklyRow.update(snapshot?.weekly ?? null, nowMs);
+
+        const message = errorText(state?.error ?? null);
+        this.errorLabel.text = message;
+        this.errorLabel.visible = message.length > 0;
+    }
+}
+
 export class UsageIndicator {
     readonly button: PanelMenu.Button;
 
-    private readonly serviceIcon: Gio.Icon;
+    private readonly providers: readonly ProviderId[];
     private readonly panelBox: St.BoxLayout;
     private readonly panelIcon: St.Icon;
     private readonly panelLabel: St.Label;
-    private readonly fiveHourRow: UsageRow;
-    private readonly weeklyRow: UsageRow;
-    private readonly planLabel: St.Label;
-    private readonly resetCreditsLabel: St.Label;
-    private readonly billingLabel: St.Label;
-    private readonly errorLabel: St.Label;
+    private readonly sections: ReadonlyMap<ProviderId, ProviderSection>;
     private readonly footerLabel: St.Label;
     private readonly onOpen: OpenListener;
     private readonly onRefresh: RefreshListener;
@@ -301,7 +397,7 @@ export class UsageIndicator {
     private readonly activitySection: ModelActivitySection;
     private readonly activityDivider: St.Widget;
 
-    private state: PollerState | null = null;
+    private readonly states = new Map<ProviderId, PollerState>();
     private popupTickId = 0;
     private openStateSignalId = 0;
     private activityRequestId = 0;
@@ -310,37 +406,39 @@ export class UsageIndicator {
 
     constructor(
         iconPath: string,
+        providers: readonly ProviderId[],
         preferences: IndicatorPreferences,
         onOpen: OpenListener,
         onRefresh: RefreshListener,
         onLoadActivity: ActivityLoader,
         onOpenPreferences: PreferencesListener,
     ) {
+        this.providers = providers;
         this.onOpen = onOpen;
         this.onRefresh = onRefresh;
         this.onLoadActivity = onLoadActivity;
         this.onOpenPreferences = onOpenPreferences;
         this.preferences = preferences;
-        this.serviceIcon = new Gio.FileIcon({
+        const usageIcon = new Gio.FileIcon({
             file: Gio.File.new_for_path(iconPath),
         });
 
-        this.button = new PanelMenu.Button(0.0, 'ChatGPT Usage');
+        this.button = new PanelMenu.Button(0.0, 'AI Usage');
 
         this.panelBox = new St.BoxLayout({
             ...HORIZONTAL_PROPS,
-            style_class: 'chatgpt-panel',
+            style_class: 'usage-panel',
             y_align: Clutter.ActorAlign.CENTER,
         } as never);
         this.panelIcon = new St.Icon({
-            gicon: this.serviceIcon,
-            style_class: 'system-status-icon chatgpt-panel-icon',
+            gicon: usageIcon,
+            style_class: 'system-status-icon usage-panel-icon',
             icon_size: 16,
         });
         this.panelBox.add_child(this.panelIcon);
         this.panelLabel = new St.Label({
-            text: '5h -- · W --',
-            style_class: 'chatgpt-panel-label',
+            text: this.panelText(),
+            style_class: 'usage-panel-label',
             y_align: Clutter.ActorAlign.CENTER,
         });
         this.panelBox.add_child(this.panelLabel);
@@ -355,84 +453,70 @@ export class UsageIndicator {
 
         const content = new St.BoxLayout({
             ...VERTICAL_PROPS,
-            style_class: 'chatgpt-popup',
+            style_class: 'usage-popup',
             x_expand: true,
             width: 350,
         } as never);
 
         const header = new St.BoxLayout({
             ...HORIZONTAL_PROPS,
-            style_class: 'chatgpt-header',
+            style_class: 'usage-header',
             x_expand: true,
         } as never);
 
         const iconShell = new St.Bin({
-            style_class: 'chatgpt-header-icon-shell',
+            style_class: 'usage-header-icon-shell',
             y_align: Clutter.ActorAlign.CENTER,
         });
         iconShell.set_child(new St.Icon({
-            gicon: this.serviceIcon,
-            style_class: 'chatgpt-header-icon',
+            gicon: usageIcon,
+            style_class: 'usage-header-icon',
             icon_size: 22,
         }));
         header.add_child(iconShell);
-
-        const heading = new St.BoxLayout({
-            ...VERTICAL_PROPS,
+        header.add_child(new St.Label({
+            text: 'AI Usage',
+            style_class: 'usage-title',
             x_expand: true,
             y_align: Clutter.ActorAlign.CENTER,
-        } as never);
-        heading.add_child(new St.Label({
-            text: 'ChatGPT Usage',
-            style_class: 'chatgpt-title',
         }));
-        this.planLabel = new St.Label({
-            text: '',
-            style_class: 'chatgpt-plan',
-        });
-        heading.add_child(this.planLabel);
 
-        this.resetCreditsLabel = new St.Label({
-            text: '',
-            style_class: 'chatgpt-plan',
-        });
-        heading.add_child(this.resetCreditsLabel);
+        content.add_child(header);
 
-        this.billingLabel = new St.Label({
-            text: '',
-            style_class: 'chatgpt-plan',
+        const sections = new Map<ProviderId, ProviderSection>();
+        providers.forEach((provider, index) => {
+            if (index > 0) {
+                content.add_child(new St.Widget({
+                    style_class: 'usage-section-divider',
+                    height: 1,
+                    x_expand: true,
+                }));
+            }
+            const section = new ProviderSection(provider);
+            sections.set(provider, section);
+            content.add_child(section.actor);
         });
-        heading.add_child(this.billingLabel);
-        header.add_child(heading);
-
-        this.fiveHourRow = new UsageRow('5-hour');
-        this.weeklyRow = new UsageRow('Weekly');
+        this.sections = sections;
 
         this.activitySection = new ModelActivitySection();
 
-        this.errorLabel = new St.Label({
-            text: '',
-            style_class: 'chatgpt-error',
-        });
-        this.errorLabel.clutter_text.line_wrap = true;
-
         this.footerLabel = new St.Label({
             text: 'Not updated yet',
-            style_class: 'chatgpt-footer',
+            style_class: 'usage-footer',
             x_expand: true,
             y_align: Clutter.ActorAlign.CENTER,
         });
 
         const footer = new St.BoxLayout({
             ...HORIZONTAL_PROPS,
-            style_class: 'chatgpt-footer-row',
+            style_class: 'usage-footer-row',
             x_expand: true,
         } as never);
         footer.add_child(this.footerLabel);
 
         const settingsButton = new St.Button({
             label: 'Settings',
-            style_class: 'chatgpt-refresh-button',
+            style_class: 'usage-button',
             can_focus: true,
             reactive: true,
             track_hover: true,
@@ -443,7 +527,7 @@ export class UsageIndicator {
 
         const refreshButton = new St.Button({
             label: 'Refresh',
-            style_class: 'chatgpt-refresh-button',
+            style_class: 'usage-button',
             can_focus: true,
             reactive: true,
             track_hover: true,
@@ -456,17 +540,13 @@ export class UsageIndicator {
         });
         footer.add_child(refreshButton);
 
-        content.add_child(header);
-        content.add_child(this.fiveHourRow.actor);
-        content.add_child(this.weeklyRow.actor);
         this.activityDivider = new St.Widget({
-            style_class: 'chatgpt-section-divider',
+            style_class: 'usage-section-divider',
             height: 1,
             x_expand: true,
         });
         content.add_child(this.activityDivider);
         content.add_child(this.activitySection.actor);
-        content.add_child(this.errorLabel);
         content.add_child(footer);
         contentItem.add_child(content);
 
@@ -488,6 +568,7 @@ export class UsageIndicator {
         );
 
         this.applyPreferences(preferences);
+        this.render();
     }
 
     applyPreferences(preferences: IndicatorPreferences): void {
@@ -510,55 +591,40 @@ export class UsageIndicator {
     }
 
     update(state: PollerState): void {
-        this.state = state;
+        this.states.set(state.provider, state);
         this.render();
     }
 
+    private panelText(): string {
+        const multiple = this.providers.length > 1;
+        return this.providers
+            .map(provider => formatPanel(
+                this.states.get(provider)?.usage ?? null,
+                multiple ? PROVIDER_SHORT_NAMES[provider] : null,
+            ))
+            .join('   ');
+    }
+
+    private footerText(nowMs: number): string {
+        const states = this.providers.map(provider => this.states.get(provider) ?? null);
+        if (states.some(state => state?.updating === true))
+            return 'Updating…';
+
+        // Show the age of the stalest provider so nothing looks fresher than it is.
+        const successes = states.map(state => state?.lastSuccessMs ?? null);
+        const oldest = successes.includes(null)
+            ? successes.find(value => value !== null) ?? null
+            : Math.min(...(successes as number[]));
+        return formatAge(oldest, nowMs);
+    }
+
     private render(): void {
-        if (this.state === null)
-            return;
-
         const nowMs = Date.now();
-        const snapshot: UsageSnapshot | null = this.state.usage;
 
-        this.panelLabel.text = formatPanel(snapshot);
-        this.planLabel.text = displayPlan(snapshot?.plan ?? null);
-        this.planLabel.visible = this.planLabel.text.length > 0;
-
-        const resetCredits = snapshot?.resetCreditsAvailable ?? null;
-        this.resetCreditsLabel.text = resetCredits === null
-            ? ''
-            : `Reset credits · ${resetCredits}`;
-        this.resetCreditsLabel.visible = resetCredits !== null;
-
-        const activeUntil = snapshot?.planActiveUntilMs ?? null;
-        if (activeUntil !== null) {
-            const date = new Date(activeUntil);
-            const formatted = date.toLocaleDateString(undefined, {
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric',
-            });
-            this.billingLabel.text = snapshot?.willRenew === true
-                ? `Next billing · ${formatted}`
-                : snapshot?.willRenew === false
-                    ? `Plan active until · ${formatted}`
-                    : `Subscription date · ${formatted}`;
-            this.billingLabel.visible = true;
-        } else {
-            this.billingLabel.text = '';
-            this.billingLabel.visible = false;
-        }
-
-        this.fiveHourRow.update(snapshot?.fiveHour ?? null, nowMs);
-        this.weeklyRow.update(snapshot?.weekly ?? null, nowMs);
-
-        const message = errorText(this.state.error);
-        this.errorLabel.text = message;
-        this.errorLabel.visible = message.length > 0;
-
-        const age = formatAge(this.state.lastSuccessMs, nowMs);
-        this.footerLabel.text = this.state.updating ? 'Updating…' : age;
+        this.panelLabel.text = this.panelText();
+        for (const [provider, section] of this.sections)
+            section.update(this.states.get(provider) ?? null, nowMs);
+        this.footerLabel.text = this.footerText(nowMs);
     }
 
     private refreshActivity(): void {
